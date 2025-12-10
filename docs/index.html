@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="utf-8">
+  <title>Peter Kocsis</title>
+  <meta content="width=device-width, initial-scale=1.0" name="viewport">
+  <meta content="Deep Learning, Diffusion, Computer Graphics, 3D Reconstruction, Relighting, Inverse Rendering, Generative AI, PBR Maps, Texturing" name="keywords">
+  <meta name="description" content="Intrinsic Image Fusion for Multi-View 3D Material Reconstruction">
+  <meta name="author" content="Peter Kocsis, Lukas Hoellein, Matthias Niessner">
+  <!-- Favicon -->
+  <link href="static/favicon.ico" rel="icon">
+  <!-- Google Web Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+  <link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet">
+  <!-- Icon Font Stylesheet -->
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.10.0/css/all.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.4.1/font/bootstrap-icons.css" rel="stylesheet">
+  <!-- Libraries Stylesheet -->
+  <link href="lib/animate/animate.css" rel="stylesheet">
+  <link href="lib/owlcarousel/assets/owl.carousel.min.css" rel="stylesheet">
+  <!-- Customized Bootstrap Stylesheet -->
+  <link href="css/bootstrap.min.css" rel="stylesheet">
+  <!-- Stylesheet -->
+  <link href="css/style.css" rel="stylesheet">
+  <!-- Font awesome -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">
+  <!-- Slideshow style -->
+  <link rel="stylesheet" href="lib/slideshow/slideshow.css">
+
+</head>
+
+<body data-bs-spy="scroll" data-bs-target=".navbar" data-bs-offset="51">
+  <!-- Header Start -->
+  <div class="container-fluid bg-light my-6 mt-0 mb-1" id="home">
+    <div class="container">
+      <div class="row justify-content-center">
+        <h2 class="display-32 text-center mt-1">Intrinsic Image Fusion for Multi-View 3D Material Reconstruction</h2>
+        <h4 class="display-32 text-center">ArXiv 2025</h4>
+      </div>
+      <div class="row justify-content-center mt-3">
+        <div class="col-lg-2">
+          <a href="https://peter-kocsis.github.io/" title="Peter Kocsis"><h5 class="display-32 text-center">Peter Kocsis</h5></a>
+          <h6 class="display-32 text-center">TU Munich</h6>
+        </div>
+        <div class="col-lg-2">
+          <a href="https://niessnerlab.org/members/lukas_hoellein/profile.html" title="Lukas Höllein"><h5 class="display-32 text-center">Lukas Höllein</h5></a>
+          <h6 class="display-32 text-center">TU Munich</h6>
+        </div>
+        <div class="col-lg-2">
+          <a href="https://niessnerlab.org/members/matthias_niessner/profile.html" title="Matthias Nießner"><h5 class="display-32 text-center">Matthias Nie&szlig;ner</h5></a>
+          <h6 class="display-32 text-center">TU Munich</h6>
+        </div>
+      </div>
+      <div class="row justify-content-center mb-1">
+        <div class="col-lg-2 text-center">
+          <a href="https://arxiv.org/abs/2504.01008" title="Paper"><i class="bi bi-file-earmark-text" style="font-size: 2em"></i><br>Paper</a></div>
+        <div class="col-lg-2 text-center">
+          <i class="bi bi-github" style="font-size: 2em"></i><br>Code</div>
+      </div>
+    </div>
+  </div>
+  <!-- Header End -->
+  <!-- Teaser Start -->
+  <div class="container">
+    <div class="row justify-content-center">
+      <div class="video-container" style="text-align:center; width:80%;">
+        <video autoplay="" muted="" loop="" width="80%" height="auto" style="pointer-events: none;">
+            <source src="./static/teaser/teaser.mp4" type="video/mp4">
+        </video>
+      </div>
+    </div>
+  </div>
+  <!-- Teaser End -->
+  <!-- Abstract Start -->
+  <div class="container-xxl" id="abstract">
+    <div class="container">
+      <!-- <div class="row wow fadeInLeft" data-wow-delay="0.1s"> -->
+        <h1 class="display-32" style="padding:0">Abstract</h1>
+        We introduce Intrinsic Image Fusion, a method that reconstructs high-quality physically based materials from multi-view images.
+        Material reconstruction is highly underconstrained and typically relies on analysis-by-synthesis, which requires expensive and noisy path tracing. 
+        To better constrain the optimization, we incorporate single-view priors into the reconstruction process. 
+        We leverage a diffusion-based material estimator that produces multiple, but often inconsistent, candidate decompositions per view.
+        To reduce the inconsistency, we fit an explicit low-dimensional parametric function to the predictions.
+        We then propose a robust optimization framework using soft per-view prediction selection together with confidence-based soft multi-view inlier set to fuse the most consistent predictions of the most confident views into a consistent parametric material space. 
+        Finally, we use inverse path tracing to optimize for the low-dimensional parameters. 
+        Our results outperform state-of-the-art methods in material disentanglement on both synthetic and real scenes, producing sharp and clean reconstructions suitable for high-quality relighting.
+      <!-- </div> -->
+    </div>
+  </div>
+  <!-- Abstract End -->
+
+  <!-- Motivation Start -->
+  <div class="container-xxl mt-5" id="method">
+    <div class="container">
+      <!-- <div class="row wow fadeInRight" data-wow-delay="0.5s"> -->
+        <h1 class="display-32" style="padding:0">Motivation</h1>
+          <p>
+          Appearance decomposition is a highly under-constrained task. 
+          Optimization-based methods often bake shading details and rendering noise into the recovered materials.
+          In contrast, monocular material priors yield clean, detailed maps, but they lack multi-view consistency and can be physically incorrect.
+          Naively aggregating these predictions leads to texture seams and artifacts due to their ambiguity.
+          We propose to model the monocular prediction space with a parametric texture and aggregate only base textures. 
+          Finally, we apply inverse path tracing to optimize the low-dimensional texture parameters, producing physically grounded estimates.
+          </p>
+
+          <div class="video-container" style="text-align:center">
+            <div style="display: flex; justify-content: space-around; margin-bottom: 10px;">
+              <div style="flex: 1; text-align: center;"><strong>RGB</strong></div>
+              <div style="flex: 1; text-align: center;"><strong>Optimization</strong></div>
+              <div style="flex: 1; text-align: center;"><strong>Monocular Prior</strong></div>
+              <div style="flex: 1; text-align: center;"><strong>Naive Fusion</strong></div>
+              <div style="flex: 1; text-align: center;"><strong>Our Fusion</strong></div>
+              <div style="flex: 1; text-align: center;"><strong>Our Fusion + Optimization</strong></div>
+            </div>
+            <video controls poster autoplay muted loop width="100%" height="auto">
+              <source src="./static/motivation/motivation.mp4" type="video/mp4">
+            </video>
+          </div>
+      <!-- </div> -->
+    </div>
+  </div>
+  <!-- Motivation End -->
+
+  <!-- Comparisons Start -->
+  <div class="container-xxl mt-5" id="method">
+    <div class="container">
+      <h1 class="display-32" style="padding:0">Comparisons</h1>
+      <p>
+      We compare our method against recent inverse rendering methods.
+      <a href="https://jerrypiglet.github.io/fipt-ucsd/">FIPT</a> and <a href="https://github.com/apple/ml-neilfpp">NeILF++</a> are purely optimization-based methods. 
+      Due to the under-constrained setting and the noisy estimation of the global illumination, these methods often bake shading details into the recovered materials, especially the albedo.
+      IRIS uses per-object single color proxy albedo estimation, better constraining the optimization. 
+      For more information, visit <a href="https://irisldr.github.io/">IRIS</a>.
+      However, this proxy is too coarse to completely rely on it, and residual shading still leaks into the decomposition.
+      In contrast, our method preserves sharp texture details and produces physically grounded material decompositions.
+
+      We present real-world comparisons on the ScanNet++ dataset.
+      Imperfect geometry is a common challenge for appearance decomposition, often causing projection errors near object boundaries and missing regions.
+      Our method optimizes on a small amount of parameters with inverse path tracing, making it more robust to these geometric imperfections. 
+      </p>
+
+      <div class="video-widget">
+        <div style="display: flex; justify-content: space-around; margin-bottom: 10px;">
+          <div style="flex: 1; text-align: center;"><strong>Albedo</strong></div>
+          <div style="flex: 1; text-align: center;"><strong>Roughness</strong></div>
+          <div style="flex: 1; text-align: center;"><strong>Metallic</strong></div>
+          <div style="flex: 1; text-align: center;"><strong>Rendering</strong></div>
+        </div>
+        <video controls autoplay muted loop width="100%">
+            <source src="./static/nvs/fipt_indoor_synthetic_kitchen_hq/ours.mp4" type="video/mp4">
+        </video>
+
+        <div class="controls-container">
+          <div class="control-row">
+              <span class="row-label">Method:</span>
+              <div class="btn-group">
+                  <button class="vid-btn-multi" data-type="method" data-val="fipt">FIPT</button>
+                  <button class="vid-btn-multi" data-type="method" data-val="neilfpp">NeILF++</button>
+                  <button class="vid-btn-multi" data-type="method" data-val="iris">IRIS</button>
+                  <button class="vid-btn-multi active" data-type="method" data-val="ours">Ours</button>
+              </div>
+          </div>
+
+          <div class="control-row">
+              <span class="row-label">Synthetic Scenes:</span>
+              <div class="btn-group">
+                  <button class="vid-btn-multi active" data-type="scene" data-val="fipt_indoor_synthetic_kitchen_hq">Kitchen</button>
+                  <button class="vid-btn-multi" data-type="scene" data-val="fipt_indoor_synthetic_bedroom_hq">Bedroom</button>
+                  <button class="vid-btn-multi" data-type="scene" data-val="fipt_indoor_synthetic_livingroom_hq">Livingroom</button>
+                  <button class="vid-btn-multi" data-type="scene" data-val="fipt_indoor_synthetic_bathroom_hq">Bathroom</button>
+              </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="video-widget">
+        <div style="display: flex; justify-content: space-around; margin-bottom: 10px;">
+          <div style="flex: 1; text-align: center;"><strong>Albedo</strong></div>
+          <div style="flex: 1; text-align: center;"><strong>Roughness</strong></div>
+          <div style="flex: 1; text-align: center;"><strong>Metallic</strong></div>
+          <div style="flex: 1; text-align: center;"><strong>Rendering</strong></div>
+        </div>
+        <video controls autoplay muted loop width="100%">
+            <source src="./static/nvs/scannetpp_2024-06-09_23-13/ours.mp4" type="video/mp4">
+        </video>
+
+        <div class="controls-container">
+            <div class="control-row">
+                <span class="row-label">Method:</span>
+                <div class="btn-group">
+                    <button class="vid-btn-multi" data-type="method" data-val="fipt">FIPT</button>
+                    <button class="vid-btn-multi" data-type="method" data-val="neilfpp">NeILF++</button>
+                    <button class="vid-btn-multi" data-type="method" data-val="iris">IRIS</button>
+                    <button class="vid-btn-multi active" data-type="method" data-val="ours">Ours</button>
+                </div>
+            </div>
+
+            <div class="control-row">
+                <span class="row-label">Real Scenes:</span>
+                <div class="btn-group">
+                    <button class="vid-btn-multi active" data-type="scene" data-val="scannetpp_2024-06-09_23-13">Apartment</button>
+                    <button class="vid-btn-multi" data-type="scene" data-val="scannetpp_2023-05-06_10-20">Bedroom</button>
+                    <button class="vid-btn-multi" data-type="scene" data-val="scannetpp_2023-05-09_22-42">Hotel</button>
+                </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <!-- Comparisons End -->
+
+  <!-- Comparisons Start -->
+  <div class="container-xxl mt-5" id="method">
+    <div class="container">
+    <h1 class="display-32" style="padding:0">Relighting</h1>
+      <p>
+      Our decomposition can be used in standard rendering engines for photorealistic relighting.
+      We move an emissive sphere inside scenes to show the capabilities of our method. 
+      </p>
+
+      <div class="video-gallery-container">
+        <video controls autoplay muted loop width="80%">
+            <source src="./static/relighting/relighting_fipt_indoor_synthetic_kitchen_hq_ours.mp4" type="video/mp4">
+        </video>
+
+        <div class="controls-container">
+          <div class="control-row">
+            <span class="row-label">Synthetic Scenes:</span>
+            <div class="btn-group">
+              <div class="video-controls">
+                <button class="vid-btn active" data-src="./static/relighting/relighting_fipt_indoor_synthetic_kitchen_hq_ours.mp4">Kitchen (Synthetic)</button>
+                <button class="vid-btn" data-src="./static/relighting/relighting_fipt_indoor_synthetic_bedroom_hq_ours.mp4">Bedroom (Synthetic)</button>
+                <button class="vid-btn" data-src="./static/relighting/relighting_fipt_indoor_synthetic_livingroom_hq_ours.mp4">Livingroom (Synthetic)</button>
+                <button class="vid-btn" data-src="./static/relighting/relighting_fipt_indoor_synthetic_bathroom_hq_ours.mp4">Bathroom (Synthetic)</button>
+              </div>
+            </div>
+          </div>
+          <div class="control-row">
+            <span class="row-label">Real Scenes:</span>
+            <div class="btn-group">
+              <div class="video-controls">
+                  <button class="vid-btn" data-src="./static/relighting/relighting_scannetpp_2024-06-09_23-13_ours.mp4">Apartment (ScanNet++)</button>
+                  <button class="vid-btn" data-src="./static/relighting/relighting_scannetpp_2023-05-06_10-20_ours.mp4">Bedroom (ScanNet++)</button>
+                  <button class="vid-btn" data-src="./static/relighting/relighting_scannetpp_2023-05-09_22-42_ours.mp4">Hotel (ScanNet++)</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div> 
+    </div>
+  </div>
+  <!-- Comparisons End -->
+
+  <!-- Citation Start -->
+  <div class="container-fluid bg-light mt-5" id="citation">
+    <div class="container">
+      <div class="row justify-content-center">
+        <h1 class="display-32">Citation</h1>
+        <pre><code>
+          @article{kocsis2025iif,
+              author = {Kocsis, Peter and H\"{o}llein, Lukas and Nie\{ss}ner, Matthias},
+              title = {Intrinsic Image Fusion for Multi-View 3D Material Reconstruction},
+              journal = {ArXiv},
+              year = {2025}}
+        </code></pre>
+      </div>
+    </div>
+  </div>
+  <!-- Citation End -->
+
+  <!-- JavaScript Libraries -->
+  <script src="https://code.jquery.com/jquery-3.4.1.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="lib/wow/wow.js"></script>
+  <!-- Template Javascript -->
+  <script src="js/main.js"></script>
+  <!-- Slideshow Javascript -->
+  <script src="lib/slideshow/slideshow.js"></script>
+  <script>
+    // 1. Select all buttons on the page
+    const buttons = document.querySelectorAll('.vid-btn');
+
+    buttons.forEach(button => {
+        button.addEventListener('click', function() {
+            
+            // 2. Find the specific container this button lives in
+            const widget = this.closest('.video-gallery-container');
+            
+            // 3. Find the video player and buttons ONLY within this widget
+            const videoPlayer = widget.querySelector('video');
+            const widgetButtons = widget.querySelectorAll('.vid-btn');
+
+            // 4. Update Active State (only for buttons in this group)
+            widgetButtons.forEach(btn => btn.classList.remove('active'));
+            this.classList.add('active');
+
+            // 5. Swap Source, Load, and Play
+            const newSrc = this.getAttribute('data-src');
+            videoPlayer.src = newSrc;
+            videoPlayer.load();
+            videoPlayer.play();
+        });
+    });
+  </script>
+  <script>
+    const buttons_multi = document.querySelectorAll('.vid-btn-multi');
+    buttons_multi.forEach(button => {
+        button.addEventListener('click', function() {
+            // 1. Context: Find the widget and the specific row of this button
+            const widget = this.closest('.video-widget');
+            const btnGroup = this.parentElement;
+
+            // 2. UI: Update active state ONLY for buttons in the same group
+            btnGroup.querySelectorAll('.vid-btn-multi').forEach(btn => btn.classList.remove('active'));
+            this.classList.add('active');
+
+            // 3. Logic: Read the TWO variables from the widget
+            // We find the button with class 'active' inside the 'method' group, then get its data-val
+            const method = widget.querySelector('.vid-btn-multi[data-type="method"].active').getAttribute('data-val');
+            
+            // We find the button with class 'active' inside the 'scene' group, then get its data-val
+            const scene = widget.querySelector('.vid-btn-multi[data-type="scene"].active').getAttribute('data-val');
+
+            // 4. Construct the filename
+            // PATTERN: ./static/method_scene.mp4
+            const newSrc = `./static/nvs/${scene}/${method}.mp4`;
+
+            // 5. Update Video
+            const videoPlayer = widget.querySelector('video');
+            videoPlayer.src = newSrc;
+            videoPlayer.load();
+            videoPlayer.play();
+        });
+    });
+  </script>
+</body>
+
+</html>
