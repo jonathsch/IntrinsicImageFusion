@@ -127,7 +127,7 @@
               <div style="flex: 1; text-align: center;"><strong>Our Fusion + Optimization</strong></div>
             </div>
             <video controls poster autoplay muted loop width="100%" height="auto">
-              <source src="./static/motivation/motivation.mp4" type="video/mp4">
+              <source src="./static/motivation/motivation_av1.mkv" type="video/mp4">
             </video>
           </div>
       <!-- </div> -->
@@ -161,7 +161,7 @@
           <div style="flex: 1; text-align: center;"><strong>Rendering</strong></div>
         </div>
         <video controls autoplay muted loop width="100%">
-            <source src="./static/nvs/fipt_indoor_synthetic_kitchen_hq/ours.mp4" type="video/mp4">
+            <source src="./static/nvs/fipt_indoor_synthetic_kitchen_hq/ours_av1.mkv" type="video/mp4">
         </video>
 
         <div class="controls-container">
@@ -195,7 +195,7 @@
           <div style="flex: 1; text-align: center;"><strong>Rendering</strong></div>
         </div>
         <video controls autoplay muted loop width="100%">
-            <source src="./static/nvs/scannetpp_2024-06-09_23-13/ours.mp4" type="video/mp4">
+            <source src="./static/nvs/scannetpp_2024-06-09_23-13/ours_av1.mkv" type="video/mp4">
         </video>
 
         <div class="controls-container">
@@ -235,7 +235,7 @@
 
       <div class="video-gallery-container">
         <video controls autoplay muted loop width="80%">
-            <source src="./static/relighting/relighting_fipt_indoor_synthetic_kitchen_hq_ours.mp4" type="video/mp4">
+            <source src="./static/relighting/relighting_fipt_indoor_synthetic_kitchen_hq_ours_av1.mkv" type="video/mp4">
         </video>
 
         <div class="controls-container">
@@ -243,10 +243,10 @@
             <span class="row-label">Synthetic Scenes:</span>
             <div class="btn-group">
               <div class="video-controls">
-                <button class="vid-btn active" data-src="./static/relighting/relighting_fipt_indoor_synthetic_kitchen_hq_ours.mp4">Kitchen (Synthetic)</button>
-                <button class="vid-btn" data-src="./static/relighting/relighting_fipt_indoor_synthetic_bedroom_hq_ours.mp4">Bedroom (Synthetic)</button>
-                <button class="vid-btn" data-src="./static/relighting/relighting_fipt_indoor_synthetic_livingroom_hq_ours.mp4">Livingroom (Synthetic)</button>
-                <button class="vid-btn" data-src="./static/relighting/relighting_fipt_indoor_synthetic_bathroom_hq_ours.mp4">Bathroom (Synthetic)</button>
+                <button class="vid-btn active" data-src="./static/relighting/relighting_fipt_indoor_synthetic_kitchen_hq_ours_av1.mkv">Kitchen (Synthetic)</button>
+                <button class="vid-btn" data-src="./static/relighting/relighting_fipt_indoor_synthetic_bedroom_hq_ours_av1.mkv">Bedroom (Synthetic)</button>
+                <button class="vid-btn" data-src="./static/relighting/relighting_fipt_indoor_synthetic_livingroom_hq_ours_av1.mkv">Livingroom (Synthetic)</button>
+                <button class="vid-btn" data-src="./static/relighting/relighting_fipt_indoor_synthetic_bathroom_hq_ours_av1.mkv">Bathroom (Synthetic)</button>
               </div>
             </div>
           </div>
@@ -254,9 +254,9 @@
             <span class="row-label">Real Scenes:</span>
             <div class="btn-group">
               <div class="video-controls">
-                  <button class="vid-btn" data-src="./static/relighting/relighting_scannetpp_2024-06-09_23-13_ours.mp4">Apartment (ScanNet++)</button>
-                  <button class="vid-btn" data-src="./static/relighting/relighting_scannetpp_2023-05-06_10-20_ours.mp4">Bedroom (ScanNet++)</button>
-                  <button class="vid-btn" data-src="./static/relighting/relighting_scannetpp_2023-05-09_22-42_ours.mp4">Hotel (ScanNet++)</button>
+                  <button class="vid-btn" data-src="./static/relighting/relighting_scannetpp_2024-06-09_23-13_ours_av1.mkv">Apartment (ScanNet++)</button>
+                  <button class="vid-btn" data-src="./static/relighting/relighting_scannetpp_2023-05-06_10-20_ours_av1.mkv">Bedroom (ScanNet++)</button>
+                  <button class="vid-btn" data-src="./static/relighting/relighting_scannetpp_2023-05-09_22-42_ours_av1.mkv">Hotel (ScanNet++)</button>
               </div>
             </div>
           </div>
@@ -337,8 +337,8 @@
             const scene = widget.querySelector('.vid-btn-multi[data-type="scene"].active').getAttribute('data-val');
 
             // 4. Construct the filename
-            // PATTERN: ./static/method_scene.mp4
-            const newSrc = `./static/nvs/${scene}/${method}.mp4`;
+            // PATTERN: ./static/method_scene_av1.mkv
+            const newSrc = `./static/nvs/${scene}/${method}_av1.mkv`;
 
             // 5. Update Video
             const videoPlayer = widget.querySelector('video');
