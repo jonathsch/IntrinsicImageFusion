@@ -1,0 +1,68 @@
+# To run this setting: python -m iif.job task=3_inverse_rendering/shading/v0_2_iris_ldr
+defaults:
+  - /component/scene@scene: fipt/indoor_synthetic/kitchen
+  
+_target_: iif.task.3_cache_shading.ChacheShading
+_recursive_: false
+_convert_: object
+
+input: 
+  _target_: iif.utils.config.native_dict
+  _recursive_: False
+  scene_path: ${..scene.input.scene_path}
+  slf: 
+    _target_: iif.utils.model.load_model
+    _cfg_: ${paths.out_dir}/${...scene.input.scene_type}/${...scene.output.scene_name}/train/0_baking_slf/v0_iris_init/slf.yaml
+    pt: ${paths.out_dir}/${...scene.input.scene_type}/${...scene.output.scene_name}/train/0_baking_slf/v0_iris_init/slf.pt  
+  emitter:
+    _target_: iif.utils.model.load_model
+    _cfg_: ${paths.out_dir}/${...scene.input.scene_type}/${...scene.output.scene_name}/train/3_inverse_rendering/lighting/v0_2_iris_ldr/emitter.yaml
+    pt: ${paths.out_dir}/${...scene.input.scene_type}/${...scene.output.scene_name}/train/3_inverse_rendering/lighting/v0_2_iris_ldr/emitter.pt
+    freeze: True
+  brdf:
+    _target_: iif.utils.model.load_model
+    cfg: 
+      _target_: iif.component.model.brdf.BaseBRDF
+    pt: null
+    freeze: True
+  dataset_cfg: 
+    _target_: ${...scene.dataset_cfg.image_based_target}
+    root: ${...scene.dataset_cfg.root}
+    transforms_file: ${...scene.dataset_cfg.transforms_file}
+    res_scale: ${...scene.dataset_cfg.res_scale}
+    subsampling_factor: ${...scene.dataset_cfg.subsampling_factor} 
+    features_to_include: 
+      - rays
+      - path
+    drop_last: False
+    transform: ${...scene.dataset_cfg.transform}
+  postfix: ""
+
+output:
+  folder_path: ${..scene.output.folder_path}/${hydra:runtime.choices.task}${..input.postfix}
+  visualization:
+    indices: 0:5
+    out_folder: vis
+    dataset_overrides:
+      _target_: ${....scene.dataset_cfg.image_based_target}
+
+model_cfg:
+  _recursive_: false
+  _convert_: object
+  slf: ${..input.slf}
+  emitter: ${..input.emitter}
+  brdf: ${..input.brdf}
+  diffuse_baking:
+    spp: 256
+    indir_depth: 0
+    batch_size: 32768  # 7.5GB VRAM
+  specular_baking:
+    spp:
+      - 64
+      - 128
+      - 128
+      - 128
+      - 128
+      - 128
+    indir_depth: 0
+    batch_size: 32768  # 7.5GB VRAM

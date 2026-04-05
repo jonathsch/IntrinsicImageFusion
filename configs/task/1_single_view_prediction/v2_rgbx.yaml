@@ -1,0 +1,31 @@
+# To run this setting: python -m iif.job task=1_single_view_prediction/v2_rgbx
+defaults:
+  - /component/scene@scene: fipt/indoor_synthetic/kitchen
+
+_target_: iif.task.1_single_view_prediction.SingleViewPrediction
+
+input:
+  folder_path: ${..scene.input.folder_path}
+  apply_smoothing: False
+
+output:
+  folder_path: ${..scene.output.folder_path}/${hydra:runtime.choices.task}
+
+model:
+  pretrained_model_name_or_path: zheng95z/rgb-to-x
+  cache_dir: ${paths.model_cache_dir}
+
+sampling:
+  aovs: 
+    - albedo
+    - roughness
+    - metallic
+    # - shading
+    # - normal
+  num_samples_per_image: 16
+  num_inference_steps: 50
+  do_gamma_correction: False
+  seed: 0
+
+logging:
+  progress_bar: True

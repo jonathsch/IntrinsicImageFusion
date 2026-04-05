@@ -1,0 +1,155 @@
+# To run this setting: python -m iif.job task=2_aggregation/segmentation/v1_gt component/scene@task.scene=fipt/real/conferenceroom paths.out_name=outputs/v5
+defaults:
+  # - /component/logger@logger: console
+  - /component/logger@logger: wandb
+  - /component/scene@scene: fipt/indoor_synthetic/kitchen
+
+_target_: iif.task.2_aggregation.MultiViewPredictionAggregation
+
+input:  # Define the high-level inputs to this task
+  slf: ${paths.out_dir}/${..scene.input.scene_type}/${..scene.input.scene_name}/train/0_baking_slf/v0_iris_init/slf.pt
+  postfix: ""
+
+output:  # Define the high-level outputs to this task
+  folder_path: ${..scene.output.folder_path}/${hydra:runtime.choices.task}
+
+logger:
+  name: ${hydra:runtime.choices.task}${..input.postfix}
+  tags: 
+    - segmentation
+    - gt
+    - ${...scene.input.scene_name}
+    - ${...scene.input.scene_type}
+
+module:
+  _target_: iif.component.task.aggregation.aggregate_segmentation.SegmentationAggregationModule
+  _recursive_: False
+  forward_cfg: null
+  model_cfg:
+    num_objects: ${...scene.input.num_objects}
+    ckpt_path: null
+    slf_path: ${...input.slf}
+    scene_path: ${...scene.input.scene_path}
+    material_cfg:
+      _target_: iif.component.model.brdf.NGPSegmentation
+      num_classes: ${..num_objects}
+  loss_cfg: 
+    use_mask: False
+  optimizer_cfg:
+    optimizer: Adam
+    learning_rate: 1e-3
+    weight_decay: 0
+  scheduler_cfg:
+    milestones: 
+      - 1
+      - 2
+    scheduler_rate: 0.2
+
+datamodule:
+  _target_: iif.component.datamodule.datamodule.DataModule
+  _recursive_: false
+  _convert_: object
+  sampling_cfg:
+    batch_size: 1
+    num_workers: 0
+    shuffle: True
+    sampler:
+      _target_: iif.component.datamodule.sampler.subset_repeated.SubsetRepeatedCacheSampler
+      indices: null
+      shuffle: True
+      seed: 0
+  dataset_cfg: 
+    _target_: ${...scene.dataset_cfg.ray_based_target}
+    root: ${...scene.dataset_cfg.root}
+    transforms_file: ${...scene.input.poses}
+    features_to_include: 
+      - rays
+      - segmentation
+    chunk_size: 131072
+    transform: ${...scene.dataset_cfg.transform}
+
+trainer:
+  _target_: pytorch_lightning.Trainer
+  min_epochs: 2
+  max_epochs: 2
+  check_val_every_n_epoch: False
+  accelerator: gpu
+  devices: 1
+  callbacks: 
+    _target_: iif.environment.hydra.arguments.dict_to_list
+    d: ${...callback}
+  logger: ${..logger}
+
+callback: 
+  model_checkpoint:
+    _target_: pytorch_lightning.callbacks.ModelCheckpoint
+    dirpath: ${...output.folder_path}
+    save_last: True
+    save_on_train_epoch_end: True
+  model_saving:
+    _target_: iif.component.callback.model_saving.ModelSaving
+    model_to_save: segmentation
+    out_path: ${...output.folder_path}/segmentation.pt
+  iteration_logger:
+    _target_: iif.component.callback.iteration_logger.IterationLogger
+    context: iteration
+    log_step: True
+    log_epoch: True
+  learning_rate_change_monitor:
+    _target_: iif.component.callback.learning_rate_change_monitor.LearningRateChangeMonitor
+    logging_interval: epoch
+    log_momentum: false
+  loss_logger:
+    _target_: iif.component.callback.batch_logger.BatchLogger
+    context: loss
+    output_keys_to_log: 
+      - "loss*"
+    batch_keys_to_log: []
+    verbose: False
+    is_metric: True
+    log_schedule:
+      on_train_batch_end: ::1
+  validation_evaluator:
+    _target_: iif.component.callback.material_evaluation_logger.MaterialEvaluationLogger
+    sample_ids: 
+      - 1
+    stage: train
+    dataset_kwargs:
+      target: ${....scene.dataset_cfg.image_based_target}
+      features_to_include: 
+      - rays
+      - segmentation
+    keys_to_log: 
+      - output/segmentation/*
+      - output/segmentation_gt/*
+    log_schedule:
+      on_train_batch_end: 0::200
+  validation_logger:
+    _target_: iif.component.callback.batch_logger.BatchLogger
+    context: validation
+    output_keys_to_log: 
+      - "validation/*"
+    batch_keys_to_log: []
+    verbose: False
+    is_metric: False
+    log_schedule:
+      on_train_batch_end: 0::200
+  validation_metric_logger:
+    _target_: iif.component.callback.metric_logger.MetricLogger
+    context: metric
+    _recursive_: False
+    log_schedule:
+      on_train_batch_end: 0::200
+    loss_model_cfg:
+      _target_: iif.component.loss.loss.ComposedLoss
+      losses:
+        loss_segmentation_acc:
+          loss:
+            _target_: iif.component.loss.loss.Loss
+            _convert_: object
+            loss_layer:
+              _target_: iif.component.loss.accuracy_loss.AccuracyLoss
+            data_keys:
+              preds: output/validation/output/segmentation/hdr
+              target: output/validation/output/segmentation_gt/hdr
+       

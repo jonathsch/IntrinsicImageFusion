@@ -1,0 +1,48 @@
+# To run this setting: python -m iif.job task=0_baking_slf/v0_iris_init component/scene@task.scene=scannetpp/processed/2023-05-06_10-20 paths.out_name=outputs/v8
+defaults:
+  - /component/scene@scene: fipt/indoor_synthetic/kitchen
+
+_target_: iif.task.0_baking_slf.BakingSLF
+_recursive_: false
+_convert_: object
+
+input: 
+  scene_path: ${..scene.input.scene_path}
+  dataset_cfg: 
+    # _target_: ${...scene.dataset_cfg.ray_based_target}  # Loads the whole dataset - infeasible for large scenes
+    _target_: ${...scene.dataset_cfg.image_based_target}
+    root: ${...scene.dataset_cfg.root}
+    transforms_file: ${...scene.dataset_cfg.transforms_file}
+    res_scale: ${...scene.dataset_cfg.res_scale}
+    subsampling_factor: ${...scene.dataset_cfg.subsampling_factor}
+    features_to_include: 
+      - rays
+      - rgbs_ldr
+      - exposure
+      - path
+    # chunk_size: 20480000  # 5GB VRAM
+    drop_last: False
+    transform: ${...scene.dataset_cfg.transform}
+
+output:
+  folder_path: ${..scene.output.folder_path}/${hydra:runtime.choices.task}
+  visualization:
+    indices: null
+    # indices: 0:5
+    out_folder: vis
+    dataset_overrides:
+      _target_: ${....scene.dataset_cfg.image_based_target}
+
+model_cfg:
+  _recursive_: false
+  _convert_: object
+  crf: 
+    cfg:
+      _target_: iif.component.model.crf.emor.EmorCRF
+      dim: 3
+    pt: null
+  slf:
+    cfg: 
+      _target_: iif.component.model.slf.VoxelSLF
+      grid_size: 256
+    pt: null

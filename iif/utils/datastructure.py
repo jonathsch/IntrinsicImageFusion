@@ -1,0 +1,800 @@
+import copy
+import fnmatch
+import os
+import time
+import warnings
+from argparse import Namespace
+from collections import OrderedDict, defaultdict
+from functools import partial
+from typing import Mapping, List, Optional, Union
+
+import torch
+import numpy as np
+
+from .logging import init_logger
+from .storage.hdf5 import HDF5StorageBackend
+from .storage.json import JSONStorageBackend
+
+
+def load_cache(cache_path, prepare_fn, num_retries=10, timeout=60):
+    cache = JSONStorageBackend(cache_path)
+    if cache.exists():
+        try:
+            with cache as storage:
+                data = storage.storage
+        except FileExistsError:
+            # Cache is being prepared
+            if num_retries == 0:
+                raise
+            time.sleep(secs=timeout)
+            return load_cache(cache_path, prepare_fn, num_retries=num_retries - 1, timeout=timeout)
+    else:
+        data = prepare_fn()
+        with cache as storage:
+            storage.storage = data
+    return data
+
+
+class LoadableObject:
+    def __init__(self, load_function, val=None):
+        self.load_function = load_function
+        self._val = val
+
+    def reload(self):
+        self._val = self.load_function()
+
+    @property
+    def val(self):
+        if self._val is None:
+            self._val = self.load_function()
+        return self._val
+
+
+class LoadableObjectList:
+    def __init__(self, lodabable_objects: List[LoadableObject]):
+        self.lodabable_objects = lodabable_objects
+
+    @property
+    def val(self):
+        return [lodabable_object.val for lodabable_object in self.lodabable_objects]
+
+    def __getitem__(self, k):
+        return self.lodabable_objects[k]
+
+
+class LoadableObjectCache:
+    def __init__(self, load_function, auto_load=True, max_size=None, name=None):
+        self.name = name
+        self.module_logger = init_logger()
+        self.load_function = load_function
+        self.max_size = max_size
+        self.auto_load = auto_load
+        self.cache = OrderedDict()
+
+    def __getitem__(self, index):
+        if index not in self.cache:
+            # self.module_logger.debug(f"Obj cache size - {self.name}: {len(self.cache)}")
+            # Remove oldest sample if max size exceeded
+            if self.max_size is not None and self.max_size <= len(self.cache) and len(self.cache) > 0:
+                del self.cache[list(self.cache.keys())[0]]
+
+            # Add the new element
+            loadable_object = LoadableObject(partial(self.load_function, index=index))
+            if self.auto_load:
+                loadable_object = loadable_object.val
+            if self.max_size is not None and self.max_size > 0:
+                self.cache[index] = loadable_object
+        else:
+            loadable_object = self.cache[index]
+        return loadable_object
+
+    def clear(self):
+        self.cache = OrderedDict()
+
+
+def split_list(tensor, chunk_size, dim=0):
+    assert dim == 0, "Only dim=0 split is supported for now"
+    return [tensor[i:i + chunk_size] for i in range(0, len(tensor), chunk_size)]
+
+
+class Batch(Mapping, dict):
+    """
+    Generic class implementing a batch as a dictionary of objects.
+    It supports every member functions of the underlying objects.
+    Calling a member function of the batch will apply it to all members
+    """
+    INTERNAL_MEMBER_PREFIX = "_Batch"
+    RECURSIVE_SEPARATOR = "/"
+
+    """ ====================================== INSTANTIATE ====================================== """
+
+    def __init__(self, *args, default=None, on_failure="skip", recursive_separator=RECURSIVE_SEPARATOR, **kwargs):
+        """
+        Constructing a new batch.
+        :param args: Batch elements as dictionary
+        :param default: Default value constructor if a key is not found. Otherwise a KeyError is raised.
+        :param kwargs: Batch elements as keyword arguments
+        """
+        super(Batch, self).__init__()
+        self.__default = default
+        self.__recursive_separator = recursive_separator
+        self.__dict__.update(**kwargs)
+        self.__in_place = False
+        self.__on_failure = on_failure
+
+        # Batch elements as dictionary
+        for arg in args:
+            if isinstance(args[0], dict):
+                self.__dict__.update(**args[0])
+            else:
+                raise NotImplementedError(f"Batch cannot be constructed from {type(arg)}")
+
+        # Set the operation functions
+        def make_func(name, in_place):
+            return lambda caller, *args: caller._get_member_attribute(name=name, in_place=in_place)(*args)
+
+        for name in [
+            # Unary operators
+            "__not__", "__abs__", "__index__", "__inv__", "__invert__", "__neg__", "__pos__",
+
+            # Binary operators
+            "__add__", "__and__", "__concat__", "__floordiv__", "__lshift__", "__mod__", "__mul__",
+            "__or__", "__pow__", "__rshift__", "__sub__", "__truediv__", "__xor__", "__eq__",
+
+            # Reverse operators
+            "__radd__", "__rand__", "__rmul__",
+            "__ror__", "__rsub__",  "__rxor__"]:
+            setattr(Batch, name, make_func(name, in_place=False))
+
+        for name in [
+            # In-place operators
+            "__iadd__", "__iand__", "__iconcat__", "__ifloordiv__", "__ilshift__", "__imod__", "__imul__",
+            "__ior__", "__ipow__", "__irshift__", "__isub__", "__itruediv__", "__ixor__"]:
+            setattr(Batch, name, make_func(name, in_place=True))
+
+        # Batchify recursively
+        self.batchify()
+
+    def batchify(self):
+        """
+        Converts all members into batches
+        :return: The batchified batch
+        """
+        for key in self.keys():
+            if isinstance(self[key], dict):
+                self[key] = Batch(self[key])
+        return self
+
+    @classmethod
+    def from_dict(cls, data):
+        """
+        Constructing a new batch from a dictionary
+        :param data: Dictionary containing the data
+        :return: Created batch
+        """
+        other = cls()
+        for key, value in data.items():
+            if isinstance(value, (dict, Batch)):
+                other[key] = cls.from_dict(value)
+            else:
+                other[key] = value
+        return other
+
+
+    @classmethod
+    def from_tensor(cls, data, cat_map, dim=0, split_fn=split_list):
+        """
+        Constructing a new batch from a tensor
+        :param data: Tensor containing the data
+        :param cat_map: Dictionary of the member names and their sizes
+        :param dim: Dimension along which to split the tensor
+        :param split_fn: Split function
+        :return: Created batch
+        """
+        other = cls()
+        for key, value in cat_map.items():
+            if isinstance(value, int):
+                other[key], data = split_fn(data, [value, data.shape[dim] - value], dim)
+            if isinstance(value, OrderedDict):
+                other[key] = cls.from_tensor(data, value, dim=dim, split_fn=split_fn)
+        return other
+
+    @classmethod
+    def from_batch_list(cls, *args):
+        """
+        Constructing a new batch with the list of members from a list of batches
+        :param args: Batches to be merged
+        :return: Created batch
+        """
+        other = cls()
+
+        batch_args = list(args)
+        all_keys = {key for batch_arg in batch_args for key in batch_arg.keys()}
+
+        for key in all_keys:
+            other.__dict__[key] = [batch_arg[key] for batch_arg in batch_args if key in batch_arg]
+
+        # Convert all member batch lists as well
+        for key in other.keys():
+            if isinstance(other[key][0], Batch):
+                other[key] = cls.from_batch_list(*other[key])
+        return other
+
+    def map(self, fn, in_place=False, on_failure=None, recursive=True, *args, **kwargs):
+        """
+        Applies a function to all members of the batch
+        :param fn: Function to be applied
+        :return: Batch of the results
+        """
+        if on_failure is None:
+            on_failure = self.__on_failure
+
+        if in_place:
+            other = self
+        else:
+            other = Batch()
+
+        def apply_to_member(key):
+            try:
+                other[key] = fn(self[key], *args, **kwargs)
+            except Exception as e:
+                if on_failure == "skip":
+                    warnings.warn(f"Failed to apply function {fn} to {key} - {self[key]}: {e}")
+                elif on_failure == "raise":
+                    raise e
+                elif on_failure == "keep":
+                    other[key] = self[key]
+                else:
+                    raise ValueError(f"Unknown on_failure option {on_failure}")
+            
+        for key in self.keys():
+            if isinstance(self[key], Batch):
+                if recursive:
+                    other[key] = self[key].map(fn, *args, **kwargs)
+                else:
+                    apply_to_member(key)
+            else:
+                apply_to_member(key)
+        return other
+
+    def map_keys(self, fn, *args, **kwargs):
+        """
+        Applies a function to all keys of the batch
+        :param fn: Function to be applied
+        :return: Batch of the results
+        """
+        other = Batch()
+        for key in self.keys():
+            if isinstance(self[key], Batch):
+                other[fn(key, *args, **kwargs)] = self[key].map_keys(fn, *args, **kwargs)
+            else:
+                other[fn(key, *args, **kwargs)] = self[key]
+        return other
+
+    def filter(self, fn, *args, **kwargs):
+        """
+        Filters all members of the batch
+        :param fn: Predicate function
+        :return: Batch of the results
+        """
+        other = Batch()
+        for key in self.keys():
+            if isinstance(self[key], Batch):
+                other[key] = self[key].filter(fn, *args, **kwargs)
+            else:
+                if fn(self[key], *args, **kwargs):
+                    other[key] = self[key]
+        return other
+
+    def copy(self, deep=True):
+        """
+        Creates a deep copy of the batch
+        :return: The created copy
+        """
+        if deep:
+            return copy.deepcopy(self)
+        else:
+            return copy.copy(self)
+
+    def __repr__(self):
+        elements_str = '\n  '.join([f"{k}: {v}" for k, v in self.items()])
+        return f"Batch({elements_str})"
+
+    def __str__(self):
+        elements_str = '\n  '.join([f"{k}: {v}" for k, v in self.items()])
+        return f"Batch({elements_str})"
+
+    def flatten(self, separator="/"):
+        """
+        Flattens the batch into a single batch
+        :return: The flattened batch
+        """
+        other = Batch()
+        for key in self.keys():
+            if isinstance(self[key], Batch):
+                other.update(self[key].flatten(separator=separator).add_prefix(key + separator))
+            else:
+                other[key] = self[key]
+        return other
+
+    def add_prefix(self, prefix):
+        """
+        Adds a prefix to all keys
+        :param prefix: Prefix to be added
+        :return: The prefixed batch
+        """
+        other = Batch()
+        for key in self.keys():
+            other[prefix + key] = self[key]
+        return other
+
+    def add_postfix(self, postfix):
+        """
+        Adds a prefix to all keys
+        :param prefix: Prefix to be added
+        :return: The prefixed batch
+        """
+        other = Batch()
+        for key in self.keys():
+            other[key + postfix] = self[key]
+        return other
+
+    def to_dict(self):
+        """
+        Converts the batch into a dictionary
+        :return: The dictionary
+        """
+        other = dict()
+        for key in self.keys():
+            if isinstance(self[key], Batch):
+                other[key] = self[key].to_dict()
+            else:
+                other[key] = self[key]
+        return other
+
+    def remap(self, mapping, transpose=False):
+        """
+        Remaps the keys of the batch
+        :param mapping: Dictionary of the old and new keys
+        :return: The remapped batch
+        """
+        other = Batch()
+        for old_key, new_key in mapping.items():
+            if transpose:
+                old_key, new_key = new_key, old_key
+            assert isinstance(old_key, str), "Only str remapping is allowed!"
+            assert isinstance(new_key, str), "Only str remapping is allowed!"
+            if old_key in self:
+                other[new_key] = self[old_key]
+            else:
+                other[new_key] = None
+        return other
+
+    def transpose(self):
+        """
+        Transposes the batch
+        :return: The transposed batch
+        """
+        other = Batch()
+        for key, value in self.items():
+            assert isinstance(value, str), "Only str batches can be transposed!"
+            assert value not in other, f"Cannot transpose batch with duplicate keys ({value})!"
+            other[value] = key
+        return other
+
+    """ ====================================== MEMBER ACCESS ====================================== """
+
+    def __contains__(self, key):
+        try:
+            if key in self.__dict__:
+                return True
+            else:
+                if self.__recursive_separator in key:
+                    root_key, sub_key = key.split(self.__recursive_separator, maxsplit=1)
+                    if root_key in self.__dict__:
+                        if isinstance(self[root_key], (dict, Batch)):
+                            return self[root_key].__contains__(sub_key)
+                        else:
+                            return False
+                    else:
+                        return False
+                else:
+                    return False
+        except KeyError:
+            del self[key]
+            return False
+
+    def __getitem__(self, index_or_key):
+        """
+        Accessing a member of the batch.
+        :param index_or_key: Index (int|tuple|list) or key (str) of the member.
+          - If a key is given, then the member of the batch is returned.
+          - If an index is given, then a new batch is returned containing the indexed elements.
+          - If a tuple|list of strings are given, a new batch is created with those keys
+        :return: The extracted member.
+        """
+        if index_or_key is None:
+            return self
+        elif isinstance(index_or_key, str):
+            return self._getitem_key(key=index_or_key)
+        elif isinstance(index_or_key, int):
+            return self._getitem_index(index=index_or_key)
+        elif isinstance(index_or_key, (tuple, list)):
+            if len(index_or_key) == 0:
+                return Batch()
+            assert all(type(index_or_key[0]) == type(idx) for idx in index_or_key), f"All indices must be of the same type, but are {index_or_key}"
+            if isinstance(index_or_key[0], int):
+                return self._getitem_index(index=index_or_key)
+            elif isinstance(index_or_key[0], str):
+                other = Batch()
+                for key in index_or_key:
+                    other[key] = self._getitem_key(key=key)
+                return other
+            elif isinstance(index_or_key[0], slice):
+                return self._getitem_index(index=index_or_key)
+            else:
+                raise NotImplementedError(f"Index type {type(index_or_key[0])} in {type(index_or_key)} not supported")
+        elif isinstance(index_or_key, torch.Tensor):
+            return self._getitem_index(index=index_or_key)
+        else:
+            raise NotImplementedError(f"Index type {type(index_or_key)} not supported")
+
+    def _getitem_key(self, key: str, allow_default=True):
+        """
+        Gets a member by its name
+        :param key: String key
+        :return: Extracted value
+        """
+        # Check if key in the dictionary
+        if key in self.__dict__:
+            return self.__dict__.__getitem__(key)
+
+        # Check if the key refers to a subvalue separated by self.__recursive_separator character.
+        if self.__recursive_separator in key:
+            root_key, sub_key = key.split(self.__recursive_separator, maxsplit=1)
+            try:
+                return self._getitem_key(key=root_key, allow_default=False)[sub_key]
+            except KeyError:
+                pass
+
+        # Check if default constructor is given
+        if allow_default:
+            if self.__default is not None:
+                self.__dict__.__setitem__(key, self.__default())
+                return self.__dict__.__getitem__(key)
+
+        raise KeyError(f"Key {key} not found in {list(self.keys())}")
+
+    def _getitem_index(self, index: Union[int, tuple, list]) -> "Batch":
+        """
+        Indexes the members of the batch
+        :param index: Index at the batch
+        :return: Extracted value
+        """
+        other = Batch()
+        for key in self.keys():
+            other.__dict__[key] = self.__dict__[key][index]
+        return other
+
+    def __setitem__(self, index_or_key, value):
+        """
+        Setting a member of the batch.
+        :param index_or_key: Index (int|tuple|list) or key (str) of the member.
+          - If a key is given, then the member of the batch is set.
+          - If an index is given, then a new batch is set containing the indexed elements.
+          - If a tuple|list of strings are given, those keys will be set
+        :return: The modified object
+        """
+        if isinstance(index_or_key, str):
+            return self._setitem_key(key=index_or_key, value=value)
+        elif isinstance(index_or_key, int):
+            return self._setitem_index(index=index_or_key, value=value)
+        elif isinstance(index_or_key, (tuple, list)):
+            assert all(type(index_or_key[0]) == type(idx) for idx in index_or_key), f"All indices must be of the same type, but are {index_or_key}"
+            if isinstance(index_or_key[0], int):
+                return self._setitem_index(index=index_or_key, value=value)
+            elif isinstance(index_or_key[0], str):
+                assert isinstance(value, Batch), "Value must be a batch if an index is given"
+                for key in index_or_key:
+                    self._setitem_key(key=key, value=value._getitem_key(key=key))
+                return self
+            else:
+                raise NotImplementedError(f"Index type {type(index_or_key[0])} in {type(index_or_key)} not supported")
+        raise NotImplementedError(f"Index type {type(index_or_key)} not supported")
+
+    def _setitem_key(self, key: str, value):
+        """
+        Sets a member by its name
+        :param key: String key
+        :param value: Value to set
+        :return: Extracted value
+        """
+        # Check if the key refers to a subvalue separated by self.__recursive_separator character.
+        if self.__recursive_separator in key:
+            root_key, sub_key = key.split(self.__recursive_separator, maxsplit=1)
+            try:
+                sub_item = self[root_key]
+                if isinstance(sub_item, Batch):
+                    return sub_item._setitem_key(key=sub_key, value=value)
+            except KeyError:
+                pass
+
+        self.__dict__.__setitem__(key, value)
+        return self
+
+    def _setitem_index(self, index: Union[int, tuple, list], value):
+        """
+        Indexes the members of the batch
+        :param index: Index at the batch
+        :param value: Value to set
+        :return: Extracted value
+        """
+        assert isinstance(value, Batch), "Value must be a batch if an index is given"
+        for key in self.keys():
+            self.__dict__[key] = value.__dict__[key][index]
+        return self
+
+    def __delitem__(self, k):
+        assert isinstance(k, str), "Only string keys are supported"
+        self.__dict__.__delitem__(k)
+
+    def __len__(self) -> int:
+        return len(list(self.keys()))
+
+    def keys(self, recursive=False):
+        if not recursive:
+            return (key for key in self.__dict__.keys() if not key.startswith(self.INTERNAL_MEMBER_PREFIX))
+        else:
+            keys = []
+            for key in self.__dict__.keys():
+                if not key.startswith(self.INTERNAL_MEMBER_PREFIX):
+                    if isinstance(self.__dict__[key], Batch):
+                        keys += [f"{key}{self.__recursive_separator}{sub_key}" for sub_key in self.__dict__[key].keys(recursive=True)]
+                    else:
+                        keys.append(key)
+            return keys
+
+    def __iter__(self):
+        for key in self.keys():
+            if not key.startswith(self.INTERNAL_MEMBER_PREFIX):
+                yield key
+
+    def items(self):
+        for key in self.keys():
+            yield key, self.__dict__[key]
+
+    def update(self, *args, **kwargs):
+        for arg in args:
+            if arg is None:
+                continue
+            
+            self.batchify()
+            if isinstance(arg, (dict, Batch)):
+                for key, value in arg.items():
+                    if key in self:
+                        if isinstance(value, (dict, Batch)):
+                            if isinstance(self[key], Batch):
+                                self[key].update(value)
+                            else:
+                                self[key] = value
+                        else:
+                            self[key] = value
+                    else:
+                        self[key] = value
+            else:
+                raise NotImplementedError(f"Update not implemented for {type(arg)}")
+        
+        if len(kwargs) > 0:
+            for key, value in kwargs.items():
+                if key in self:
+                    if isinstance(value, (dict, Batch)):
+                        if isinstance(self[key], Batch):
+                            self[key].update(value)
+                        else:
+                            self[key] = value
+                    else:
+                        self[key] = value
+                else:
+                    self[key] = value
+
+        self.batchify()
+        return self
+
+    def pop(self, index):
+        return self.__dict__.pop(index)
+
+    def __deepcopy__(self, memo=None):
+        other = Batch()
+        for key in self.keys():
+            other[key] = copy.deepcopy(self[key], memo=memo)
+        return other
+
+    def to_list(self, per_element=False):
+        idx = 0
+        if not per_element:
+            elements = []
+            try:
+                while True:
+                    next_element = self[idx]
+                    if len(next_element) == 0:
+                        break
+                    elements.append(next_element)
+                    idx += 1
+            except IndexError:
+                pass
+        else:
+            elements = list(self.__dict__.values())[3:]  # Filter the built-in elements
+        return elements
+
+    def __getstate__(self):
+        """
+        Serializes the batch
+        :return:
+        """
+        state_dict = self.__dict__
+        return state_dict
+
+    def __setstate__(self, d):
+        """
+        Deserializes the batch
+        :param d:
+        :return:
+        """
+        self.__dict__ = d
+
+    def __reduce__(self):
+        """
+        Deserializes the batch - older variant, support python multiprocessing ForkingPickler
+        :param d:
+        :return:
+        """
+        state = self.__getstate__()
+        return (self.__class__, tuple(), state)
+
+    def query_wildcard(self, query):
+        """
+        Query the batch with a wildcard query.
+        :param query: Query string
+        :return: Batch of the results
+        """
+        if isinstance(query, str):
+            query = [query]
+
+        queried_keys = [k for q in query for k in fnmatch.filter(self.keys(recursive=True), q)]
+        return self[queried_keys]
+
+    """ ====================================== OPERATIONS ====================================== """
+
+    def __getattribute__(self, name):
+        """
+        Generic method called on every attribute query.
+        If the attribute is not defined, then a function call is assumed and a function pointer is returned,
+        which applies the function to all members.
+        :param name: Attribute to be queried
+        :return: Function or attribute value
+        """
+        try:
+            return super(Batch, self).__getattribute__(name)
+        except AttributeError:
+            return self._get_member_attribute(name)
+
+    def _get_member_attribute(self, name, in_place=False):
+        """
+        Creates a new batch with the member attributes.
+        :param name: Attribute to be queried
+        :return: Batch of the member attributes
+        """
+        if len(self) == 0:
+            # If empty, the members are also empty
+            return self
+
+        if in_place:
+            other = self
+        else:
+            other = Batch(default=self.__default, on_failure=self.__on_failure, recursive_separator=self.__recursive_separator)
+
+        other.__in_place = in_place
+
+        for key in self.keys():
+            attr = self.__dict__[key]
+            if hasattr(attr, name):
+                other.__dict__[key] = getattr(attr, name)
+            else:
+                if self.__on_failure == "skip":
+                    warnings.warn(f"Member function {name} not found for {key} - {type(attr)}")
+                elif self.__on_failure == "raise":
+                    raise AttributeError(f"Member function {name} not found for {key} - {type(attr)}")
+                elif self.__on_failure == "keep":
+                    # Create noop function
+                    other.__dict__[key] = lambda *args, _attr=attr, **kwargs: _attr
+                else:
+                    raise ValueError(f"Unknown on_failure option {self.__on_failure}")
+        return other
+
+    def __call__(self, *args, **kwargs):
+        """
+        Calls all members with arguments
+        :param args:
+        :param in_place:
+        :param kwargs:
+        :return:
+        """
+        if self.__in_place:
+            other = self
+        else:
+            other = Batch(default=self.__default, on_failure=self.__on_failure, recursive_separator=self.__recursive_separator)
+
+        for key in self.keys():
+            args_for_key = [arg if not isinstance(arg, Batch) else arg[key] for arg in args]
+            kwargs_for_key = {k: val if not isinstance(val, Batch) else val[key] for k, val in kwargs.items()}
+            other.__dict__[key] = self.__dict__[key](*args_for_key, **kwargs_for_key)
+        return other
+
+    @classmethod
+    def apply(cls, func, *args, **kwargs):
+        """
+        Applies a function to all members
+        :param func: Function to be applied
+        :param args: Arguments of the function
+        :param kwargs: Keyword arguments of the function
+        :return: Batch of the results
+        """
+        other = cls()
+
+        batch_args = [arg for arg in list(args) + list(kwargs.values()) if isinstance(arg, Batch)]
+        assert len(batch_args) > 0, "At least one argument must be a Batch"
+        all_keys = {key for batch_arg in batch_args for key in batch_arg.keys()}
+
+        for key in all_keys:
+            args_for_key = [arg if not isinstance(arg, Batch) else arg[key] for arg in args]
+            kwargs_for_key = {k: val if not isinstance(val, Batch) else val[key] for k, val in kwargs.items()}
+            other.__dict__[key] = func(*args_for_key, **kwargs_for_key)
+        return other
+
+    """ ====================================== SPECIALIZED METHODS ====================================== """
+
+    def collapse(self):
+        """
+        Collapses the batch into a single element.
+        This method requires all members to have the same size.
+        :return: Collapsed value
+        """
+        if len(self) == 0:
+            raise ValueError("Cannot collapse empty batch")
+        else:
+            values = list(self.values())
+            collapsed_value = values[0]
+
+            for value in values[1:]:
+                assert type(collapsed_value) == type(value), f"All members must have the same type, but are {[type(val) for val in values]}"
+
+            if isinstance(collapsed_value, (int, float, str, bool)):
+                if all((value == collapsed_value for value in values[1:])):
+                    return collapsed_value
+                else:
+                    return None
+
+            elif isinstance(collapsed_value, (tuple, list)):
+                for value in values[1:]:
+                    for idx, v in enumerate(value):
+                        if v != collapsed_value[idx]:
+                            collapsed_value[idx] = None
+
+            elif isinstance(collapsed_value, dict):
+                for value in values[1:]:
+                    for key in value.keys():
+                        if value[key] != collapsed_value[key]:
+                            collapsed_value[key] = None
+
+            elif isinstance(collapsed_value, torch.Tensor):
+                for value in values[1:]:
+                    collapsed_value[torch.not_equal(value, collapsed_value)] = None
+
+            elif isinstance(collapsed_value, np.ndarray):
+                for value in values[1:]:
+                    collapsed_value[np.not_equal(value, collapsed_value)] = None
+
+            else:
+                raise NotImplementedError(f"Collapsing not implemented for {type(collapsed_value)}")
+
+            return collapsed_value

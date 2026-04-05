@@ -1,0 +1,7 @@
+defaults:
+  - .@_here_: default
+
+# path to root directory
+# this requires PROJECT_ROOT environment variable to exist
+# PROJECT_ROOT is inferred and set by pyrootutils package in `train.py` and `eval.py`
+root_dir: /cluster/hithlum/pkocsis/projects/priorbasedinverserendering/

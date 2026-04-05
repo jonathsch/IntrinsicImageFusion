@@ -1,0 +1,244 @@
+_target_: iif.utils.config.native_dict
+_recursive_: false
+_convert_: object
+
+input:
+  scene_type: fipt/indoor_synthetic
+  scene_name: kitchen
+  scene_postfix: ""
+  root: ${paths.data_dir}/${.scene_type}/${.scene_name}
+  folder_path: ${.root}/train/Image 
+  num_segments: 5018
+  num_objects: 91
+  scene_path: ${.root}/scene.obj
+  poses: transforms.json
+  res_scale: 1.
+  subsampling_factor: 1
+
+output:
+  scene_name: ${..input.scene_name}${..input.scene_postfix}
+  folder_path: ${paths.out_dir}/${..input.scene_type}/${..input.scene_name}/train
+
+dataset_cfg:
+  ray_based_target: iif.component.datamodule.dataset.fipt_synthetic.FIPTSyntheticRayDataset
+  image_based_target: iif.component.datamodule.dataset.fipt_synthetic.FIPTSyntheticDataset
+  root: ${..input.root}
+  transforms_file: ${..input.poses}
+  res_scale: ${..input.res_scale}
+  subsampling_factor: ${..input.subsampling_factor}
+  transform: 
+    _target_: iif.component.datamodule.transform.batch_transform.BatchTransform
+    transform:
+      rays: null
+      exposure: null
+      index: null
+      crf: null
+      path: null
+      _default:
+        _target_: iif.component.datamodule.transform.compose.Compose
+        transforms:
+          t0:
+            _target_: iif.component.datamodule.transform.totensor.ToTensor
+
+vis_cfg:
+  fov: 85.0
+  log_indices: 
+    - 1
+    - 10
+
+supp_cfg:
+  fov: 85.0
+
+trajectory_cfg:
+  static_paper:
+    _target_: iif.component.rendering.trajectory.static.StaticTrajectory
+    cam2world: [  # 001_0001.png
+                [
+                    -0.8081163538114231,
+                    -0.055086365986132535,
+                    -0.5864413448802638,
+                    0.6289999967477854
+                ],
+                [
+                    -0.0003651565113768074,
+                    0.9956639115619492,
+                    -0.09302280297798532,
+                    1.4710000013610691
+                ],
+                [
+                    0.5890227715150347,
+                    -0.0749591054882644,
+                    -0.8046324049782896,
+                    2.3229999057297572
+                ],
+                [
+                    0.0,
+                    0.0,
+                    0.0,
+                    1.0
+                ]
+            ]
+    num_frames: 10
+  static_paper_view2:
+    _target_: iif.component.rendering.trajectory.static.StaticTrajectory
+    cam2world: [  # 001_0001.png
+                [
+                    -0.24192189559966773,
+                    -0.18514115274887788,
+                    -0.9524686608956119,
+                    3.376961165048544
+                ],
+                [
+                    5.551115123125783e-17,
+                    0.981627183447664,
+                    -0.19080899537654492,
+                    1.3173009708737864
+                ],
+                [
+                    0.9702957262759965,
+                    -0.04616087385896195,
+                    -0.23747710899182156,
+                    -0.9177184466019419
+                ],
+                [
+                    0.0,
+                    0.0,
+                    0.0,
+                    1.0
+                ]
+            ]
+    num_frames: 10
+  static:
+    _target_: iif.component.rendering.trajectory.static.StaticTrajectory
+    cam2world: [  # 001_0001.png
+                [
+                    -0.8081163538114231,
+                    -0.055086365986132535,
+                    -0.5864413448802638,
+                    0.6289999967477854
+                ],
+                [
+                    -0.0003651565113768074,
+                    0.9956639115619492,
+                    -0.09302280297798532,
+                    1.4710000013610691
+                ],
+                [
+                    0.5890227715150347,
+                    -0.0749591054882644,
+                    -0.8046324049782896,
+                    2.3229999057297572
+                ],
+                [
+                    0.0,
+                    0.0,
+                    0.0,
+                    1.0
+                ]
+            ]
+    num_frames: 90
+  nvs:
+    _target_: iif.component.rendering.trajectory.interpolation.InterpolationTrajectory
+    cam2worlds: 
+      - [  # 001_0001.png
+                [
+                    -0.8081163538114231,
+                    -0.055086365986132535,
+                    -0.5864413448802638,
+                    0.6289999967477854
+                ],
+                [
+                    -0.0003651565113768074,
+                    0.9956639115619492,
+                    -0.09302280297798532,
+                    1.4710000013610691
+                ],
+                [
+                    0.5890227715150347,
+                    -0.0749591054882644,
+                    -0.8046324049782896,
+                    2.3229999057297572
+                ],
+                [
+                    0.0,
+                    0.0,
+                    0.0,
+                    1.0
+                ]
+            ]
+      - [  # 000_0001.png
+                [
+                    -0.9965899134259569,
+                    -0.009007649318140964,
+                    -0.08202077000007627,
+                    -0.7039999788987984
+                ],
+                [
+                    -0.00041514082019921544,
+                    0.9945583920862391,
+                    -0.10417980797128734,
+                    1.6649999550013868
+                ],
+                [
+                    0.0825128603051877,
+                    -0.10379049563710685,
+                    -0.9911706013092099,
+                    1.830000051132684
+                ],
+                [
+                    0.0,
+                    0.0,
+                    0.0,
+                    1.0
+                ]
+            ]
+    frames_per_segment: 
+      - 90  
+    rotation_mode: slerp
+    translation_mode: cubic
+
+relighting_cfg:
+  flying_sphere_paper:
+    lighting_cfg:
+      type: 'sphere'
+      emitter:
+        type: 'area'
+        radiance:
+          type: 'rgb'
+          value: [53., 50., 45.]
+      bsdf:
+        type: 'diffuse'
+        reflectance:
+          type: 'rgb'
+          value: [0.0, 0.0, 0.0]
+    interpolation:
+      _target_: iif.component.rendering.lighting.flying_sphere.FlyingSphereLightingTrajectory
+      positions:
+        - [-1., 1.5, -1.4]
+        - [-1., 1.5, 0.8]
+      size: 0.15
+      frames_per_segment: 
+        - 10
+  flying_sphere:
+    lighting_cfg:
+      lighting_sphere:
+        type: 'sphere'
+        emitter:
+          type: 'area'
+          radiance:
+            type: 'rgb'
+            value: [53., 50., 45.]
+        bsdf:
+          type: 'diffuse'
+          reflectance:
+            type: 'rgb'
+            value: [0.0, 0.0, 0.0]
+    interpolation:
+      lighting_sphere:
+        _target_: iif.component.rendering.lighting.flying_sphere.FlyingSphereLightingTrajectory
+        positions:
+          - [-1., 1.5, -1.4]
+          - [-1., 1.5, 0.8]
+        size: 0.2
+        frames_per_segment: 
+          - 90

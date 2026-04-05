@@ -1,0 +1,264 @@
+# To run this setting: python -m iif.job task=2_aggregation/v5_cm_soft_fullmat
+defaults:
+  # - /component/logger@logger: console
+  - /component/logger@logger: wandb
+  - /component/scene@scene: fipt/indoor_synthetic/kitchen
+
+_target_: iif.task.train.Train
+
+input:  # Define the high-level inputs to this task
+  postfix: ""
+
+output:  # Define the high-level outputs to this task
+  folder_path: ${..scene.output.folder_path}/${hydra:runtime.choices.task}${..input.postfix}
+
+logger:
+  name: ${hydra:runtime.choices.task}${..input.postfix}
+  tags: 
+    - segmentation
+    - gt
+    - ${...scene.output.scene_name}
+    - ${...scene.input.scene_type}
+
+module:
+  _target_: iif.component.task.aggregation.aggregate_mat_cm_soft.SoftCMMaterialAggregationModule
+  _recursive_: False
+  _convert_: object
+  forward_cfg: 
+    scale_to_gt: False
+    jitter_within_pixel: True
+  model_cfg:
+    num_segments: ${...scene.input.num_segments}
+    num_predictions_per_image: ${...datamodule.dataset_cfg.single_view_ref_num}
+    ckpt_path: null
+    scene_path: ${...scene.input.scene_path}
+    slf:
+      _target_: iif.utils.model.load_model
+      _cfg_: ${paths.out_dir}/${....scene.input.scene_type}/${....scene.output.scene_name}/train/0_baking_slf/v0_iris_init/slf.yaml
+      pt: ${paths.out_dir}/${....scene.input.scene_type}/${....scene.output.scene_name}/train/0_baking_slf/v0_iris_init/slf.pt
+      freeze: True
+    brdf:
+      _target_: iif.component.model.brdf.ProbabilisticBRDF
+      voxel_min: _voxel_min_
+      voxel_max: _voxel_max_
+    brdf_prediction_transform:  # Applied to the image predictions
+      _target_: iif.component.model.brdf.LinearObjImageBRDFTransform
+      num_segments: ${..num_segments}
+      num_predictions_per_image: ${..num_predictions_per_image}
+  loss_cfg: 
+    temperature_error: 1
+    temperature_logit: 1
+    w_albedo_transform: 1e-1
+    regularizations:
+      - brdf_prediction_transform
+    weight:
+      brdf_prediction_transform_albedo: 1e+2  
+      brdf_prediction_transform_roughness: 1e+2  
+      brdf_prediction_transform_metallic: 1e+2  
+  optimizer_cfg:
+    optimizer: Adam
+    learning_rate: 1e-2
+    weight_decay: 0
+  scheduler_cfg:
+    milestones: 
+      - 2
+      - 4
+      - 6
+      - 8
+    scheduler_rate: 0.5
+
+datamodule:
+  _target_: iif.component.datamodule.datamodule.DataModule
+  _recursive_: false
+  _convert_: object
+  sampling_cfg:
+    batch_size: 1
+    num_workers: 0
+    shuffle: True
+    sampler:
+      _target_: iif.component.datamodule.sampler.subset_repeated.SubsetRepeatedCacheSampler
+      indices: null
+      shuffle: True
+      seed: 0
+  dataset_cfg: 
+    _target_: ${...scene.dataset_cfg.ray_based_target}
+    root: ${...scene.dataset_cfg.root}
+    transforms_file: ${...scene.dataset_cfg.transforms_file}
+    res_scale: ${...scene.dataset_cfg.res_scale}
+    subsampling_factor: ${...scene.dataset_cfg.subsampling_factor}  # Take only every Nth frame
+    single_view_ref_root: ${paths.out_dir}/${...scene.input.scene_type}/${...scene.output.scene_name}/train/1_single_view_prediction/v2_rgbx
+    single_view_ref_num: 16
+    features_to_include: 
+      - rays
+      - index
+      - albedo
+      - albedo_ref
+      - roughness_ref
+      - metallic_ref
+      - segmentation
+      - per_image_segmentation
+    chunk_size: 65536
+    transform: ${...scene.dataset_cfg.transform}
+
+trainer:
+  _target_: pytorch_lightning.Trainer
+  min_epochs: 10
+  max_epochs: 10
+  check_val_every_n_epoch: False
+  accelerator: gpu
+  devices: 1
+  callbacks: 
+    _target_: iif.environment.hydra.arguments.dict_to_list
+    d: ${...callback}
+  logger: ${..logger}
+
+callback: 
+  # model_reinit:
+  #   _target_: iif.component.callback.model_reinit.ModelReinit
+  #   log_schedule:
+  #     on_train_epoch_start: ::1
+  anneal_temperature:
+    _target_: iif.component.callback.model_config_change.ModelConfigChange
+    _convert_: object
+    change_type: multiply
+    model_cfg:
+      loss_cfg:
+        temperature_error: 0.85
+        temperature_logit: 0.85
+    log_schedule:
+      # on_train_epoch_start: ::1
+      # on_train_batch_end: ::1000
+      on_train_batch_end: ::100
+  dataset_reshuffle:
+    _target_: iif.component.callback.dataset_reshuffle.DatasetReshuffle
+  model_summary:
+    _target_: pytorch_lightning.callbacks.ModelSummary
+    max_depth: 2
+  brdf_saving:
+    _target_: iif.component.callback.model_saving.ModelSaving
+    model_to_save: brdf
+    out_path: ${...output.folder_path}/brdf.pt
+  # model_checkpoint:
+  #   _target_: pytorch_lightning.callbacks.ModelCheckpoint
+  #   dirpath: ${...output.folder_path}
+  #   save_last: True
+  #   save_on_train_epoch_end: True
+  iteration_logger:
+    _target_: iif.component.callback.iteration_logger.IterationLogger
+    context: iteration
+    log_step: True
+    log_epoch: True
+  learning_rate_change_monitor:
+    _target_: iif.component.callback.learning_rate_change_monitor.LearningRateChangeMonitor
+    logging_interval: epoch
+    log_momentum: false
+  loss_logger:
+    _target_: iif.component.callback.batch_logger.BatchLogger
+    context: loss
+    output_keys_to_log: 
+      - "loss*"
+      # - "accuracy*"
+      - "debug*"
+    batch_keys_to_log: []
+    verbose: False
+    is_metric: True
+    log_schedule:
+      on_train_batch_end: ::1
+  validation_evaluator:
+    _target_: iif.component.callback.material_evaluation_logger.MaterialEvaluationLogger
+    forward_cfg: 
+      scale_to_gt: True
+    sample_ids: 
+      - 1
+      - 2
+    stage: train
+    dataset_kwargs:
+      target: ${....scene.dataset_cfg.image_based_target}
+      features_to_include: 
+      - rays
+      - index
+      - albedo_ref
+      - roughness_ref
+      - metallic_ref
+      - albedo
+      - roughness
+      - metallic
+      - segmentation
+      - per_image_segmentation
+    keys_to_log: 
+      - batch/albedo
+      - batch/roughness
+      - batch/metallic
+      - output/material/*
+    log_schedule:
+      on_train_batch_end: 0::1000
+  validation_logger:
+    _target_: iif.component.callback.batch_logger.BatchLogger
+    context: validation
+    output_keys_to_log: 
+      - "validation/*"
+    batch_keys_to_log: []
+    verbose: False
+    is_metric: False
+    log_schedule:
+      on_train_batch_end: 0::1000
+  validation_metric_logger:
+    _target_: iif.component.callback.metric_logger.MetricLogger
+    context: metric
+    _recursive_: False
+    log_schedule:
+      on_train_batch_end: 0::1000
+    loss_model_cfg:
+      _target_: iif.component.loss.loss.ComposedLoss
+      losses:
+        albedo_psnr:
+          loss:
+            _target_: iif.component.loss.loss.Loss
+            _convert_: object
+            loss_layer:
+              _target_: torchmetrics.image.PeakSignalNoiseRatio
+              data_range: 1.0
+            data_keys:
+              preds: output/validation/batch/albedo
+              target: output/validation/output/material/albedo_transformed
+            transform:
+              _target_: iif.component.datamodule.transform.batch_transform.BatchTransform
+              transform:
+                _default:
+                  _target_: iif.component.datamodule.transform.clamp.Clamp
+                  min: 0.0
+                  max: 1.0
+        roughness_psnr:
+          loss:
+            _target_: iif.component.loss.loss.Loss
+            _convert_: object
+            loss_layer:
+              _target_: torchmetrics.image.PeakSignalNoiseRatio
+              data_range: 1.0
+            data_keys:
+              preds: output/validation/batch/roughness
+              target: output/validation/output/material/roughness_transformed
+            transform:
+              _target_: iif.component.datamodule.transform.batch_transform.BatchTransform
+              transform:
+                _default:
+                  _target_: iif.component.datamodule.transform.clamp.Clamp
+                  min: 0.0
+                  max: 1.0
+        metallic_psnr:
+          loss:
+            _target_: iif.component.loss.loss.Loss
+            _convert_: object
+            loss_layer:
+              _target_: torchmetrics.image.PeakSignalNoiseRatio
+              data_range: 1.0
+            data_keys:
+              preds: output/validation/batch/metallic
+              target: output/validation/output/material/metallic_transformed
+            transform:
+              _target_: iif.component.datamodule.transform.batch_transform.BatchTransform
+              transform:
+                _default:
+                  _target_: iif.component.datamodule.transform.clamp.Clamp
+                  min: 0.0
+                  max: 1.0

@@ -1,0 +1,33 @@
+#!/bin/bash
+
+#SBATCH --job-name=Bash_Script
+
+#SBATCH --nodes=1
+#SBATCH --cpus-per-gpu=8
+#SBATCH --gpus=1
+#SBATCH --constraint="rtx_a6000|rtx_3090|a100"
+#SBATCH --mem=64GB
+
+#SBATCH --partition=submit
+#SBATCH --qos=normal
+
+#SBATCH --signal=2
+
+#SBATCH --output=/cluster/hithlum/pkocsis/projects/priorbasedinverserendering/logs/slurm/bash_%A-%a.log
+#SBATCH --open-mode=append
+
+#SBATCH --time=4-00:00:00
+
+#SBATCH --mail-type=ALL
+#SBATCH --mail-user=peter.kocsis@tum.de
+
+echo Starting Bash Script on $SLURMD_NODENAME:$SLURM_JOB_GPUS
+
+COMMAND="bash $SCRIPT_PATH $SCRIPT_ARGUMENTS"
+echo "$COMMAND"
+echo ========================================================================================
+
+export HYDRA_FULL_ERROR=1
+export OPENCV_IO_ENABLE_OPENEXR=1
+export OPTIX_CACHE_PATH=/cluster/hithlum/pkocsis/.optix_cache/$SLURM_JOB_ID
+eval "$COMMAND"
