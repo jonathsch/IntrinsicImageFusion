@@ -13,7 +13,7 @@
 
 #SBATCH --signal=2
 
-#SBATCH --output=/cluster/hithlum/pkocsis/projects/priorbasedinverserendering/logs/slurm/python_%A-%a.log
+#SBATCH --output=./logs/python_%A-%a.log
 #SBATCH --open-mode=append
 
 #SBATCH --time=4-00:00:00
@@ -29,6 +29,6 @@ echo ===========================================================================
 
 export HYDRA_FULL_ERROR=1
 export OPENCV_IO_ENABLE_OPENEXR=1
-export OPTIX_CACHE_PATH=/cluster/hithlum/pkocsis/.optix_cache/$SLURM_JOB_ID
+export OPTIX_CACHE_PATH=.optix_cache/$SLURM_JOB_ID
 eval "$COMMAND"
 rm -rf $OPTIX_CACHE_PATH
