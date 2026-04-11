@@ -12,7 +12,7 @@ if [[ -z "${PRED_OUT_DIR}" ]]; then
 fi
 
 if [[ -z "${SCENE_TYPE}" ]]; then
-  SCENE_TYPE="fipt/indoor_synthetic"
+  SCENE_TYPE="indoor_synthetic"
 fi
 
 if [[ -z "${SCENE_NAME}" ]]; then

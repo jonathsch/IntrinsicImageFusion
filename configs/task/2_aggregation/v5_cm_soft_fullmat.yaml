@@ -2,7 +2,7 @@
 defaults:
   # - /component/logger@logger: console
   - /component/logger@logger: wandb
-  - /component/scene@scene: fipt/indoor_synthetic/kitchen
+  - /component/scene@scene: indoor_synthetic/kitchen
 
 _target_: iif.task.train.Train
 

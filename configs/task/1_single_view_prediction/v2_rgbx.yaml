@@ -1,6 +1,6 @@
 # To run this setting: python -m iif.job task=1_single_view_prediction/v2_rgbx
 defaults:
-  - /component/scene@scene: fipt/indoor_synthetic/kitchen
+  - /component/scene@scene: indoor_synthetic/kitchen
 
 _target_: iif.task.1_single_view_prediction.SingleViewPrediction
 

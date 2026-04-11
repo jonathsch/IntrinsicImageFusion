@@ -37,10 +37,10 @@ Our project has the following structure:
 
 ```
 ├── docs                  <- Project page
-├── datasets              <- Datasets
-├── configs               <- Training configs
+├── data                  <- Data folder
+├── configs               <- Pipeline configs
 ├── iif                   <- Our main package for Intrinsic Image Fusion
-├── outputs               <- Training outputs
+├── outputs               <- Pipeline outputs
 ├── scripts               <- Folder to store the scripts
 ├── environment.yaml      <- Env file for creating conda environment
 ├── LICENSE
@@ -48,29 +48,35 @@ Our project has the following structure:
 ```
 
 # Installation
-To install the dependencies, you can use the provided environment file:
+To install the dependencies, you can use the provided environment file. Please ensure that you have the `CUDA_HOME` and the `LD_LIBRARY_PATH` variable set in order to install [TinyCudaNN](https://github.com/nvlabs/tiny-cuda-nn).
 ```
-conda create -f environment.yaml
+conda env create -f environment.yaml
 conda activate iif
 ```
 
-# Datasets
-We provide our pre-processed scenes for the kitchen, bedroom, livingroom and bathroom synthetic scenes. You can download them with the following commands:
+# Data
+We provide our pre-processed scenes for the kitchen, bedroom, livingroom and bathroom synthetic scenes. The dataset contains rendered images of all modalities, as well as the scene in Mitsuba and Blender formats. You can download them with the following commands:
 ```
-mkdir data
-
-for item in fipt/indoor_synthetic/kitchen fipt/indoor_synthetic/bedroom fipt/indoor_synthetic/livingroom fipt/indoor_synthetic/bathroom; do
-  wget "https://kaldir.vc.cit.tum.de/iif/${item}.zip" -O "datasets/${item}.zip"
-  unzip "datasets/${item}.zip" -d data
-  rm "datasets/${item}.zip"
+for item in indoor_synthetic/kitchen.zip indoor_synthetic/bedroom.zip indoor_synthetic/livingroom.zip indoor_synthetic/bathroom.zip; do
+  mkdir -p data/${item%.*}
+  wget "https://kaldir.vc.cit.tum.de/intrinsix/${item}" -O "data/${item}"
+  unzip "data/${item}" -d data/${item%.*}/..
+  rm "data/${item}"
 done
 ```
 
+# Logging
+Some of our stages are using [W&B](https://wandb.ai/site/) for logging. You can disable it in the resepctive config files, or adjust the `configs/component/logger/wandb.yaml` file.
+
 # Pipeline
-Our project consists of multiple stages, as described below. We provide scripts that run all the stages consecutively, but you can also run the specific stages one-by-one and adjust the configurations to your needs. The full script will skip those stages that has been already finished. If parallel evaluation is available, we recommend to run the first stage (single-view predictions) separately on multiple threads to speed up the process. You can run the provided scripts directly with bash, or also on clusters (we provide SLURM job files). To run the full pipeline on SLURM:
+Our project consists of multiple stages, as described below. We provide scripts that run all the stages consecutively, but you can also run the specific stages one-by-one and adjust the configurations to your needs. The full script will skip those stages that has been already finished. If parallel evaluation is available, we recommend to run the first stage (single-view predictions) separately on multiple threads to speed up the process. You can run the provided scripts directly with bash, or also on clusters (we provide SLURM job files). 
+
+Before running any job files, please check the `scripts/bash.job` and `scripts/python.job` files for the logging and submission settings. 
+
+To run the full pipeline on SLURM:
 
 ```
-sbatch --export=ALL,SCRIPT_PATH="./scripts/pipeline.sh",SCENE_NAME="kitchen" --mem=64GB --cpus-per-gpu=8 --constraint="a100|rtx_a6000" scripts/vc/bash.job
+sbatch --export=ALL,SCRIPT_PATH="./scripts/pipeline.sh",SCENE_NAME="kitchen" --mem=64GB --cpus-per-gpu=8 scripts/bash.job
 ```
 
 ## 0 - Pre-processing
@@ -84,7 +90,7 @@ python -m iif.job task=0_baking_slf/v0_iris_init component/scene@task.scene=$SCE
 Our first stage generates 16 material predictions for every image in the scene. This is the most compute intensive step; thus, we recommend to run this stage in parallel if possible. The script is thread safe, you can start multiple instances at the same time. In case of a SLURM (16 processes):
 
 ```
-sbatch --export=ALL,SCRIPT_PATH="iif.job",SCRIPT_ARGUMENTS="task=1_single_view_prediction/v2_rgbx component/scene@task.scene=$SCENE_TYPE/$SCENE_NAME" --mem=22GB --cpus-per-gpu=3 --array=0-15 scripts/vc/python.job
+sbatch --export=ALL,SCRIPT_PATH="iif.job",SCRIPT_ARGUMENTS="task=1_single_view_prediction/v2_rgbx component/scene@task.scene=$SCENE_TYPE/$SCENE_NAME" --mem=22GB --cpus-per-gpu=3 --array=0-15 scripts/python.job
 ```
 
 ## 2 - Multi-View Fusion

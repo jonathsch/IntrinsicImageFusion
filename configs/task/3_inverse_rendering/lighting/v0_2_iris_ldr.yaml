@@ -2,7 +2,7 @@
 defaults:
   # - /component/logger@logger: console
   - /component/logger@logger: wandb
-  - /component/scene@scene: fipt/indoor_synthetic/kitchen
+  - /component/scene@scene: indoor_synthetic/kitchen
 
 _target_: iif.task.train.Train
 
@@ -65,7 +65,7 @@ module:
   model_cfg:
     scene_path: ${...scene.input.scene_path}
     num_objects: ${...scene.input.num_objects}
-    ckpt_path: null # ${paths.out_dir}/2_aggregation/v3_1_2_uncertainty_transformer/fipt/indoor_synthetic/kitchen/train/brdf.pt
+    ckpt_path: null # ${paths.out_dir}/2_aggregation/v3_1_2_uncertainty_transformer/indoor_synthetic/kitchen/train/brdf.pt
     crf: ${...input.crf}
     brdf: ${...input.brdf}
     emitter: ${...input.emitter}

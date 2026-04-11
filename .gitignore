@@ -1,0 +1,25 @@
+# Run-related files
+/wandb/
+/results/
+/models/
+/debug/
+/data/
+/outputs/
+/model_cache/
+
+# PyCharm relevant ignores
+.idea
+
+# Python relevant ignores
+**/__pycache__
+**/.ipynb_checkpoints/
+
+
+# Lightning-Hydra-Template
+configs/local/default.yaml
+/data/
+/logs/
+.env
+.autoenv
+.vscode/
+**/build/

@@ -34,7 +34,7 @@ class Task(ABC):
                 # Save the starting command
                 with open(os.path.join(out_folder, "command.sh"), "w") as f:
                     modules = sys.argv[0].split("/")
-                    command = f"python -m {'.'.join(modules[modules.index('priorbasedinverserendering'):-1])}.{modules[-1].replace('.py', '')} " + " ".join(sys.argv[1:])
+                    command = f"python -m {'.'.join(modules[modules.index('IntrinsicImageFusion'):-1])}.{modules[-1].replace('.py', '')} " + " ".join(sys.argv[1:])
                     f.write(command + "\n")
 
                 self.module_logger.info(f"Config saved to {out_folder}")

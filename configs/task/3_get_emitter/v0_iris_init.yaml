@@ -1,6 +1,6 @@
 # To run this setting: python -m iif.job task=3_get_emitter/v0_iris_init paths.out_name=outputs/v2
 defaults:
-  - /component/scene@scene: fipt/indoor_synthetic/kitchen
+  - /component/scene@scene: indoor_synthetic/kitchen
   
 _target_: iif.task.3_get_emitter.InitEmitter
 _recursive_: false

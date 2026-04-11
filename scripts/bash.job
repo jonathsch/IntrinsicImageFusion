@@ -5,10 +5,10 @@
 #SBATCH --nodes=1
 #SBATCH --cpus-per-gpu=8
 #SBATCH --gpus=1
-#SBATCH --constraint="rtx_a6000|rtx_3090|a100"
+#SBATCH --constraint="a100"
 #SBATCH --mem=64GB
 
-#SBATCH --partition=submit
+#SBATCH --partition=a100_submit
 #SBATCH --qos=normal
 
 #SBATCH --signal=2

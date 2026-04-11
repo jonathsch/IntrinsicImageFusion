@@ -1,5 +1,5 @@
 defaults:
-  - fipt/indoor_synthetic@_here_: kitchen
+  - indoor_synthetic@_here_: kitchen
 
 input:
   scene_name: bedroom
@@ -7,7 +7,7 @@ input:
   num_objects: 30
 
 output:
-  folder_path: ${paths.out_dir}/fipt/indoor_synthetic/bedroom/train
+  folder_path: ${paths.out_dir}/indoor_synthetic/bedroom/train
 
 trajectory_cfg:
   static:

@@ -1,6 +1,6 @@
 # To run this setting: python -m iif.job task=3_inverse_rendering/shading/v0_2_iris_ldr
 defaults:
-  - /component/scene@scene: fipt/indoor_synthetic/kitchen
+  - /component/scene@scene: indoor_synthetic/kitchen
   
 _target_: iif.task.3_cache_shading.ChacheShading
 _recursive_: false

@@ -1,8 +1,8 @@
-# To run this setting: python -m iif.job task=2_aggregation/segmentation/v1_gt component/scene@task.scene=fipt/real/conferenceroom paths.out_name=outputs/v5
+# To run this setting: python -m iif.job task=2_aggregation/segmentation/v1_gt component/scene@task.scene=real/conferenceroom paths.out_name=outputs/v5
 defaults:
   # - /component/logger@logger: console
   - /component/logger@logger: wandb
-  - /component/scene@scene: fipt/indoor_synthetic/kitchen
+  - /component/scene@scene: indoor_synthetic/kitchen
 
 _target_: iif.task.2_aggregation.MultiViewPredictionAggregation
 
