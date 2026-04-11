@@ -28,6 +28,7 @@ dependencies:
       - matplotlib
       - pillow
       - kornia==0.7.3
+      - moviepy==1.0.3
 
       # Utilities
       - tqdm==4.66.1
