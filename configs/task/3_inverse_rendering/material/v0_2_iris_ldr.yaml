@@ -1,0 +1,221 @@
+# To run this setting: python -m iif.job task=3_inverse_rendering/material/v0_2_iris_ldr paths.out_name=outputs/v3
+defaults:
+  # - /component/logger@logger: console
+  - /component/logger@logger: wandb
+  - /component/scene@scene: indoor_synthetic/kitchen
+
+_target_: iif.task.train.Train
+
+input:  # Define the high-level inputs to this task
+  _target_: iif.utils.config.native_dict
+  _recursive_: False
+  crf:
+    _target_: iif.utils.model.load_model
+    _cfg_: ${paths.out_dir}//${...scene.input.scene_type}/${...scene.output.scene_name}/train/3_inverse_rendering/lighting/v0_2_iris_ldr/crf.yaml
+    pt: ${paths.out_dir}//${...scene.input.scene_type}/${...scene.output.scene_name}/train/3_inverse_rendering/lighting/v0_2_iris_ldr/crf.pt
+    freeze: False
+  brdf:
+    _target_: iif.utils.model.load_model
+    _cfg_: ${paths.out_dir}//${...scene.input.scene_type}/${...scene.output.scene_name}/train/3_inverse_rendering/lighting/v0_2_iris_ldr/brdf.yaml
+    pt: ${paths.out_dir}//${...scene.input.scene_type}/${...scene.output.scene_name}/train/3_inverse_rendering/lighting/v0_2_iris_ldr/brdf.pt
+    freeze: 
+      brdf_base: True
+      brdf_transform.semantic_net: True
+  emitter:
+    _target_: iif.utils.model.load_model
+    _cfg_: ${paths.out_dir}//${...scene.input.scene_type}/${...scene.output.scene_name}/train/3_inverse_rendering/lighting/v0_2_iris_ldr/emitter.yaml
+    pt: ${paths.out_dir}//${...scene.input.scene_type}/${...scene.output.scene_name}/train/3_inverse_rendering/lighting/v0_2_iris_ldr/emitter.pt
+    freeze: True
+  shading_cache_root: ${paths.out_dir}//${..scene.input.scene_type}/${..scene.output.scene_name}/train/3_inverse_rendering/shading/v0_2_iris_ldr
+  postfix: ""
+
+output:  # Define the high-level outputs to this task
+  folder_path: ${..scene.output.folder_path}/${hydra:runtime.choices.task}${..input.postfix}
+
+logger:
+  name: ${hydra:runtime.choices.task}${..input.postfix}
+  tags: 
+    - material
+    - ${...scene.output.scene_name}
+    - ${...scene.input.scene_type}
+
+module:
+  _target_: iif.component.task.inverse_rendering.inverse_rendering.InverseRenderingModule
+  _recursive_: False
+  forward_cfg: 
+    jitter_within_pixel: False
+    spp: 1
+    spp_batch: 1
+    do_emissionfilter: True
+    rendering_type: shading_cache  # shading_cache | path_tracing
+  model_cfg:
+    scene_path: ${...scene.input.scene_path}
+    num_objects: ${...scene.input.num_objects}
+    ckpt_path: null # ${paths.out_dir}/2_aggregation/v3_1_2_uncertainty_transformer/indoor_synthetic/kitchen/train/brdf.pt
+    crf: ${...input.crf}
+    brdf: ${...input.brdf}
+    emitter: ${...input.emitter}
+  loss_cfg: 
+    rgb_type: ldr  # ldr | hdr
+    regularizations:
+      - brdf
+      - crf
+    weight:
+      brdf_transform_albedo: 0.   # Transformation should be minimal
+      brdf_transform_roughness: 0.   # Transformation should be minimal
+      brdf_transform_metallic: 0.   # Transformation should be minimal
+      brdf_roughness: 1e-3 # 5e-4     # As diffuse as possible -> roughness=1
+      brdf_metallic: 5e-3 # 5e-3     # As diffuse as possible -> metallic=0
+      crf_increasing: 0.1  # CRF params should be increasing
+      crf_weight: 0.001    # CRF weights should be close to domain
+  optimizer_cfg:
+    optimizer: SGD
+    learning_rate: 10
+    weight_decay: 0
+  scheduler_cfg:
+    milestones: 
+      - 1
+      - 2
+    scheduler_rate: 0.2
+
+datamodule:
+  _target_: iif.component.datamodule.datamodule.DataModule
+  _recursive_: false
+  _convert_: object
+  sampling_cfg:
+    batch_size: 1
+    num_workers: 0
+    shuffle: True
+    sampler:
+      _target_: iif.component.datamodule.sampler.subset_repeated.SubsetRepeatedCacheSampler
+      indices: null
+      shuffle: True
+      seed: 0
+  dataset_cfg:  # 35GB RAM caching
+    _target_: ${...scene.dataset_cfg.ray_based_target}
+    root: ${...scene.dataset_cfg.root}
+    transforms_file: ${...scene.dataset_cfg.transforms_file}
+    res_scale: ${...scene.dataset_cfg.res_scale}
+    subsampling_factor: ${...scene.dataset_cfg.subsampling_factor} 
+    single_view_ref_root: ${paths.out_dir}/${...scene.input.scene_type}/${...scene.output.scene_name}/train/1_single_view_prediction/v2_rgbx
+    shading_cache_root: ${...input.shading_cache_root}
+    features_to_include: 
+      - rays
+      - index
+      - rgbs_hdr
+      - rgbs_ldr
+      - segmentation
+      - exposure
+      - diffuse_shading_cache
+      - specular0_shading_cache
+      - specular1_shading_cache
+    chunk_size: 32768  # 8192
+    transform: ${...scene.dataset_cfg.transform}
+
+trainer:
+  _target_: pytorch_lightning.Trainer
+  min_epochs: 3
+  max_epochs: 3
+  # detect_anomaly: True
+  check_val_every_n_epoch: False
+  accelerator: gpu
+  devices: 1
+  callbacks: 
+    _target_: iif.environment.hydra.arguments.dict_to_list
+    d: ${...callback}
+  logger: ${..logger}
+
+callback: 
+  dataset_reshuffle:
+    _target_: iif.component.callback.dataset_reshuffle.DatasetReshuffle
+  model_summary:
+    _target_: pytorch_lightning.callbacks.ModelSummary
+    max_depth: 2
+  # model_checkpoint:
+  #   _target_: pytorch_lightning.callbacks.ModelCheckpoint
+  #   dirpath: ${...output.folder_path}
+  #   save_last: True
+  #   save_on_train_epoch_end: True
+  brdf_saving:
+    _target_: iif.component.callback.model_saving.ModelSaving
+    model_to_save: brdf
+    out_path: ${...output.folder_path}/brdf.pt
+  crf_saving:
+    _target_: iif.component.callback.model_saving.ModelSaving
+    model_to_save: crf
+    out_path: ${...output.folder_path}/crf.pt
+  emitter_saving:
+    _target_: iif.component.callback.model_saving.ModelSaving
+    model_to_save: emitter
+    out_path: ${...output.folder_path}/emitter.pt
+  iteration_logger:
+    _target_: iif.component.callback.iteration_logger.IterationLogger
+    context: iteration
+    log_step: True
+    log_epoch: True
+  learning_rate_change_monitor:
+    _target_: iif.component.callback.learning_rate_change_monitor.LearningRateChangeMonitor
+    logging_interval: epoch
+    log_momentum: false
+  loss_logger:
+    _target_: iif.component.callback.batch_logger.BatchLogger
+    context: loss
+    output_keys_to_log: [ "loss*" ]
+    batch_keys_to_log: []
+    verbose: False
+    is_metric: True
+    log_schedule:
+      on_train_batch_end: ::1
+  metric_logger:
+    _target_: iif.component.callback.batch_logger.BatchLogger
+    context: analytics
+    output_keys_to_log: [ "metric*" ]
+    batch_keys_to_log: []
+    verbose: False
+    is_metric: False
+    log_schedule:
+      on_train_batch_end: ::1
+  validation_evaluator:
+    _target_: iif.component.callback.validation_logger.ValidationLogger
+    context: validation
+    forward_cfg: 
+      jitter_within_pixel: False
+      spp: 1
+      spp_batch: 1
+      denoising: True
+      do_prefilter: False
+      do_emissionfilter: False
+    sample_ids: ${...scene.vis_cfg.log_indices}
+    stage: train
+    dataset_kwargs:
+      target: ${....scene.dataset_cfg.image_based_target}
+      features_to_include: 
+      - rays
+      - index
+      - rgbs_ldr
+      - rgbs_hdr
+      - segmentation
+      - exposure
+      - emission 
+      - crf
+      - albedo
+      - roughness
+      - diffuse_shading_cache
+      - specular0_shading_cache
+      - specular1_shading_cache
+    keys_to_average:
+      - output/metrics/*
+    keys_to_log: 
+      - batch/rgbs_ldr
+      - batch/rgbs_hdr
+      - batch/albedo
+      - batch/roughness
+      - batch/metallic
+      - batch/emission
+      - output/rgb/*
+      - output/brdf/*
+      - output/crf/*
+      - output/emitter/*
+      - output/metrics/*
+    log_schedule:
+      on_train_batch_end: 0::200

@@ -1,0 +1,65 @@
+name: iif
+channels:
+  - nvidia/label/cuda-11.7.0
+  - anaconda
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.8
+  - pip
+  - pip:
+      # Core Python and Pytorch libraries
+      - numpy==1.24.4
+      - torch==1.13.1+cu117
+      - torchvision==0.14.1+cu117
+      - --extra-index-url https://download.pytorch.org/whl/cu117
+      - pytorch-lightning==1.9.0
+      - mitsuba==3.5.0
+      - drjit==0.4.4
+      - xformers==0.0.16
+      - --extra-index-url https://download.pytorch.org/whl/cu117
+      - git+https://github.com/NVlabs/tiny-cuda-nn/#subdirectory=bindings/torch
+      - torch_scatter==2.1.2
+
+      # Image processing and visualization
+      - opencv-python
+      - imageio
+      - imageio-ffmpeg
+      - matplotlib
+      - pillow
+      - kornia==0.7.3
+      - moviepy==1.0.3
+
+      # Utilities
+      - tqdm==4.66.1
+      - argparse==1.4.0
+      - omegaconf==2.3.0
+      - scipy==1.10.1
+      - scikit-image==0.21.0
+      - trimesh==3.21.4
+      - pyquaternion==0.9.9
+      - lovely-tensors==0.1.22
+      - einops==0.8.1
+
+      # Hydra Configuration management
+      - hydra-core==1.3.2 
+      - hydra-colorlog==1.2.0
+      - pyrootutils==1.0.4
+
+      # Hydra Configuration management
+      - huggingface-hub==0.25.0
+      - transformers==4.40.2
+      - diffusers==0.20.0
+      - accelerate==1.0.1
+
+      # Logging and monitoring
+      - tensorboardx==2.6.2.2
+      - wandb==0.16.1
+
+      # File and path handling
+      - pathlib==1.0.1
+
+      # Optional dependencies for CRF and plotting
+      - lpips==0.1.4
+      - matplotlib-inline==0.1.6
+      - git+https://github.com/sbarratt/torch_interpolations.git

@@ -1,0 +1,21 @@
+# To run this setting: python -m iif.job task=5_metrics/v0_emission
+defaults:
+  - 5_metrics@_here_: default
+
+input:
+  pred: 
+    modality: emission
+
+metrics_cfg:
+  l2:
+    _target_: torchmetrics.MeanSquaredError
+  log_l2:
+    _target_: iif.component.loss.log_mean_squared_error.LogMeanSquaredError
+  # psnr: 
+  #   _target_: iif.component.loss.psnr.PeakSignalNoiseRatio
+  #   data_range: 1.0
+  ssim:
+    _target_: torchmetrics.image.StructuralSimilarityIndexMeasure
+    data_range: 1.0
+  iou:
+    _target_: iif.component.loss.iou.IntersectionOverUnion

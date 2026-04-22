@@ -1,0 +1,125 @@
+defaults:
+  - indoor_synthetic@_here_: kitchen
+
+input:
+  scene_name: livingroom
+  num_segments: 6281
+  num_objects: 68
+
+output:
+  folder_path: ${paths.out_dir}/indoor_synthetic/livingroom/train
+
+trajectory_cfg:
+  static:
+    _target_: iif.component.rendering.trajectory.static.StaticTrajectory
+    cam2world: [ 
+                [
+                    -0.9971818624908173,
+                    0.002007924079471396,
+                    -0.07499534225694274,
+                    -0.2800000011920929
+                ],
+                [
+                    0.00028039369836468236,
+                    0.9997345369562882,
+                    0.02303859796449942,
+                    1.253999948501587
+                ],
+                [
+                    0.07502169352073318,
+                    0.022952643806041062,
+                    -0.9969177105677249,
+                    5.818999767303467
+                ],
+                [
+                    0.0,
+                    0.0,
+                    0.0,
+                    1.0
+                ]
+            ]
+    num_frames: 90
+  nvs:
+    _target_: iif.component.rendering.trajectory.interpolation.InterpolationTrajectory
+    cam2worlds: 
+      - [  # 008_0001.png
+                [
+                    -0.9971818624908173,
+                    0.002007924079471396,
+                    -0.07499534225694274,
+                    -0.2800000011920929
+                ],
+                [
+                    0.00028039369836468236,
+                    0.9997345369562882,
+                    0.02303859796449942,
+                    1.253999948501587
+                ],
+                [
+                    0.07502169352073318,
+                    0.022952643806041062,
+                    -0.9969177105677249,
+                    5.818999767303467
+                ],
+                [
+                    0.0,
+                    0.0,
+                    0.0,
+                    1.0
+                ]
+            ]
+      - [  # 007_0001.png
+                [
+                    -0.6725311823130818,
+                    -0.27714292334579793,
+                    -0.6862168817916925,
+                    1.5290000438690186
+                ],
+                [
+                    0.00042471750296296795,
+                    0.927089232278367,
+                    -0.3748404660766376,
+                    1.777999997138977
+                ],
+                [
+                    0.7400686646734959,
+                    -0.2523833501498333,
+                    -0.6233787100435302,
+                    3.312000036239624
+                ],
+                [
+                    0.0,
+                    0.0,
+                    0.0,
+                    1.0
+                ]
+            ]
+    frames_per_segment: 
+      - 90  
+    rotation_mode: slerp
+    translation_mode: cubic
+
+relighting_cfg:
+  flying_sphere:
+    lighting_cfg:
+      lighting_sphere:
+        type: 'sphere'
+        emitter:
+          type: 'area'
+          radiance:
+            type: 'rgb'
+            value: [53., 50., 45.]
+        bsdf:
+          type: 'diffuse'
+          reflectance:
+            type: 'rgb'
+            value: [0.0, 0.0, 0.0]
+    interpolation:
+      lighting_sphere:
+        _target_: iif.component.rendering.lighting.flying_sphere.FlyingSphereLightingTrajectory
+        positions:
+          - [-1.5, 1.6, 3.0]
+          - [1.5, 1.6, 3.0]
+        size: 0.2
+        frames_per_segment: 
+          - 90

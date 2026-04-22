@@ -1,0 +1,67 @@
+# To run this setting: python -m iif.job task=4_render/v0_render paths.out_name=outputs/v2
+defaults:
+  - /component/scene@scene: indoor_synthetic/kitchen
+
+_target_: iif.task.4_render.Render
+_recursive_: false
+_convert_: object
+
+input:  # Define the high-level inputs to this task
+  _target_: iif.utils.config.native_dict
+  _recursive_: False
+  scene_path: ${..scene.input.scene_path}
+  dataset_cfg:
+    _target_: ${...scene.dataset_cfg.image_based_target}
+    root: ${...scene.dataset_cfg.root}
+    transforms_file: ${...scene.dataset_cfg.transforms_file}
+    res_scale: ${...scene.dataset_cfg.res_scale}
+    subsampling_factor: ${...scene.dataset_cfg.subsampling_factor}
+    single_view_ref_root: ${paths.out_dir}/${...scene.input.scene_type}/${...scene.output.scene_name}/train/1_single_view_prediction/v2_rgbx
+    features_to_include: 
+      - rays
+      - path
+      - exposure
+      - albedo
+    transform: ${...scene.dataset_cfg.transform}
+  crf:
+    _target_: iif.utils.model.load_model
+    _cfg_: ${paths.out_dir}/${...scene.input.scene_type}/${...scene.output.scene_name}/train/3_inverse_rendering/material/v0_2_iris_ldr/crf.yaml
+    pt: ${paths.out_dir}/${...scene.input.scene_type}/${...scene.output.scene_name}/train/3_inverse_rendering/material/v0_2_iris_ldr/crf.pt
+    freeze: True
+  brdf:
+    _target_: iif.utils.model.load_model
+    _cfg_: ${paths.out_dir}//${...scene.input.scene_type}/${...scene.output.scene_name}/train/3_inverse_rendering/material/v0_2_iris_ldr/brdf.yaml
+    pt: ${paths.out_dir}//${...scene.input.scene_type}/${...scene.output.scene_name}/train/3_inverse_rendering/material/v0_2_iris_ldr/brdf.pt
+    freeze: True
+  emitter:
+    _target_: iif.utils.model.load_model
+    _cfg_: ${paths.out_dir}/${...scene.input.scene_type}/${...scene.output.scene_name}/train/3_inverse_rendering/material/v0_2_iris_ldr/emitter.yaml
+    pt: ${paths.out_dir}/${...scene.input.scene_type}/${...scene.output.scene_name}/train/3_inverse_rendering/material/v0_2_iris_ldr/emitter.pt
+    _override_:
+      caching: False
+    freeze: True
+  postfix: ""
+
+output:  # Define the high-level outputs to this task
+  folder_path: ${..scene.output.folder_path}/${hydra:runtime.choices.task}${..input.postfix}
+
+render_cfg:
+  modalities_to_render: 
+    - rgbs_ldr
+    - rgbs_hdr
+    - albedo
+    - roughness
+    - metallic
+    - emission
+    - emission_mask
+  jitter_within_pixel: True
+  scale_albedo_to_gt: True
+  perfect_scale_albedo_to_gt: False
+  perfect_scale_roughness_to_gt: False
+  perfect_scale_metallic_to_gt: False
+  mask_emitters: True
+  mask_speculars: True
+  spp: 128
+  spp_batch: 16  # 16GB VRAM
+  depth: 4
+  denoise: True

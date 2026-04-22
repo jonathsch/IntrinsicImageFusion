@@ -1,0 +1,56 @@
+# To run this setting: python -m iif.job task=3_get_emitter/v0_iris_init paths.out_name=outputs/v2
+defaults:
+  - /component/scene@scene: indoor_synthetic/kitchen
+  
+_target_: iif.task.3_get_emitter.InitEmitter
+_recursive_: false
+_convert_: object
+
+input: 
+  _target_: iif.utils.config.native_dict
+  _recursive_: False
+  scene_path: ${..scene.input.scene_path}
+  slf: 
+    _target_: iif.utils.model.load_model
+    _cfg_: ${paths.out_dir}/${...scene.input.scene_type}/${...scene.output.scene_name}/train/0_baking_slf/v0_iris_init/slf.yaml
+    pt: ${paths.out_dir}/${...scene.input.scene_type}/${...scene.output.scene_name}/train/0_baking_slf/v0_iris_init/slf.pt  
+    freeze: True
+  crf:
+    _target_: iif.utils.model.load_model
+    _cfg_: ${paths.out_dir}/${...scene.input.scene_type}/${...scene.output.scene_name}/train/0_baking_slf/v0_iris_init/crf.yaml
+    pt: ${paths.out_dir}/${...scene.input.scene_type}/${...scene.output.scene_name}/train/0_baking_slf/v0_iris_init/crf.pt
+    freeze: True
+  dataset_cfg: 
+    _target_: ${...scene.dataset_cfg.ray_based_target}
+    root: ${...scene.dataset_cfg.root}
+    transforms_file: ${...scene.dataset_cfg.transforms_file}
+    res_scale: ${...scene.dataset_cfg.res_scale}
+    subsampling_factor: ${...scene.dataset_cfg.subsampling_factor} 
+    features_to_include: 
+      - rays
+      - rgbs_ldr
+      - exposure
+    chunk_size: 20480000  # 5GB VRAM
+    drop_last: False
+    transform: ${...scene.dataset_cfg.transform}
+  postfix: ""
+
+output:
+  folder_path: ${..scene.output.folder_path}/${hydra:runtime.choices.task}${..input.postfix}
+  visualization:
+    indices: 0:12
+    out_folder: vis
+    dataset_overrides:
+      _target_: ${....scene.dataset_cfg.image_based_target}
+
+model_cfg:
+  _recursive_: false
+  _convert_: object
+  # threshold: 0.75  # Threshold for emitter segmentation
+  threshold: 0.99  # Threshold for emitter segmentation
+  slf: ${..input.slf}
+  crf: ${..input.crf}
+  emitter:
+    cfg: 
+      _target_: iif.component.model.emitter.SLFImportanceEmitter
+    pt: null

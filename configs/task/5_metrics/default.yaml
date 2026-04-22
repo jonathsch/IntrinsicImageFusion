@@ -1,0 +1,34 @@
+# To run this setting: python -m iif.job task=5_metrics/v0_albedo
+defaults:
+  - /component/scene@scene: indoor_synthetic/kitchen
+
+_target_: iif.task.5_metrics.Metrics
+_recursive_: false
+_convert_: object
+
+input:  # Define the high-level inputs to this task
+  _target_: iif.utils.config.native_dict
+  _recursive_: False
+
+  pred:
+    modality: null  # DEFINE THE MODALITY HERE
+    source: v0_render
+    folder_path: ${paths.out_dir}/${...scene.input.scene_type}/${...scene.output.scene_name}/train/4_render/${.source}${..postfix}
+
+  target:
+    modality: ${..pred.modality}
+    dataset_cfg:
+      _target_: ${....scene.dataset_cfg.image_based_target}
+      root: ${....scene.dataset_cfg.root}
+      transforms_file: ${....scene.dataset_cfg.transforms_file}
+      single_view_ref_root: ${paths.out_dir}/${....scene.input.scene_type}/${....scene.output.scene_name}/train/1_single_view_prediction/v2_rgbx
+      features_to_include: 
+        - path
+        - ${...modality}
+      transform: ${....scene.dataset_cfg.transform}
+  
+  postfix: ""
+
+output:  # Define the high-level outputs to this task
+  folder_path: ${..scene.output.folder_path}/5_metrics/${..input.pred.source}${..input.postfix}/${..input.pred.modality}
+  file_path: ${.folder_path}/metrics.json
