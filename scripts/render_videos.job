@@ -1,36 +1,32 @@
 #!/bin/bash
 
-#SBATCH --job-name=Render_Videos
-
+#SBATCH --job-name=render_synth
+#SBATCH --partition=rtx_2080_submit
 #SBATCH --nodes=1
 #SBATCH --cpus-per-gpu=8
 #SBATCH --gpus=1
-#SBATCH --constraint="a100"
 #SBATCH --mem=64GB
+#SBATCH --output=./logs/render_videos_%A_%a.log
+#SBATCH --time=12:00:00
+# One array task per scene — runs all 4 in parallel (SLURM allocates 4 GPUs).
+#SBATCH --array=0-3
 
-#SBATCH --partition=a100_submit
-#SBATCH --qos=normal
+SCENES=(kitchen bedroom livingroom bathroom)
+SCENE="${SCENES[$SLURM_ARRAY_TASK_ID]}"
 
-#SBATCH --signal=2
-
-#SBATCH --output=./logs/render_videos_%A.log
-#SBATCH --open-mode=append
-
-#SBATCH --time=06:00:00
-
-# Default args — override via:
-#   sbatch --export=ALL,ARGS="--scene bedroom --num-frames 480" scripts/render_videos.job
-ARGS="${ARGS:---scene kitchen --num-frames 240 --spp 64}"
+# Optional extra CLI args (e.g. --num-frames 480, --spp 512). Override at submit:
+#   sbatch --export=ALL,EXTRA_ARGS="--num-frames 480" scripts/render_videos.job
+EXTRA_ARGS="${EXTRA_ARGS:-}"
 
 cd "$SLURM_SUBMIT_DIR"
 mkdir -p ./logs
 
-echo "Starting Render_Videos on $SLURMD_NODENAME:$SLURM_JOB_GPUS"
-COMMAND="python scripts/render_videos.py $ARGS"
+echo "Starting Render_Videos[$SLURM_ARRAY_TASK_ID]: $SCENE on $SLURMD_NODENAME:$SLURM_JOB_GPUS"
+COMMAND="python scripts/render_videos.py --scene $SCENE $EXTRA_ARGS"
 echo "$COMMAND"
 echo ========================================================================================
 
-export OPTIX_CACHE_PATH=.optix_cache/$SLURM_JOB_ID
+export OPTIX_CACHE_PATH=.optix_cache/${SLURM_ARRAY_JOB_ID}_${SLURM_ARRAY_TASK_ID}
 eval "$COMMAND"
 status=$?
 rm -rf "$OPTIX_CACHE_PATH"

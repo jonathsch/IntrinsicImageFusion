@@ -42,14 +42,19 @@ def parse_args():
     p.add_argument("--output-root", default="outputs/render_video")
     p.add_argument("--num-frames", type=int, default=240)
     p.add_argument("--fps", type=int, default=30)
-    p.add_argument("--spp", type=int, default=64)
+    p.add_argument("--spp", type=int, default=256,
+                   help="samples per pixel. 256 = 16x16 multijitter grid; "
+                        "denoiser turns this into a near-noise-free output.")
     p.add_argument("--width", type=int, default=1280)
     p.add_argument("--height", type=int, default=720)
-    p.add_argument("--max-depth", type=int, default=16,
+    p.add_argument("--max-depth", type=int, default=24,
                    help="path-tracing max depth (more bounces = better GI, slower)")
     p.add_argument("--fov", type=float, default=60.0)
     p.add_argument("--pose-source", choices=("trajectory", "transforms"),
                    default="trajectory")
+    p.add_argument("--index", type=int, default=None,
+                   help="if set, render only the segment between keyframe N and N+1 "
+                        "instead of SLERPing across the entire trajectory")
     p.add_argument("--seed", type=int, default=0)
 
     # Quality knobs
@@ -299,7 +304,16 @@ def main():
 
     print(f"loading keyframe poses ({args.pose_source}) ...")
     key_poses, pose_path = load_keyframe_poses(scene_dir, args.pose_source)
-    print(f"  {key_poses.shape[0]} keyframes from {pose_path}")
+    total_keyframes = key_poses.shape[0]
+    print(f"  {total_keyframes} keyframes from {pose_path}")
+    if args.index is not None:
+        if not 0 <= args.index < total_keyframes - 1:
+            print(f"error: --index must be in [0, {total_keyframes - 2}]",
+                  file=sys.stderr)
+            sys.exit(1)
+        key_poses = key_poses[args.index : args.index + 2]
+        print(f"  rendering segment between keyframes "
+              f"{args.index} → {args.index + 1}")
     poses = interpolate_poses(key_poses, args.num_frames)
     print(f"  interpolated to {poses.shape[0]} frames")
 
@@ -401,7 +415,9 @@ def main():
         "exposure": args.exposure,
         "crf": args.crf,
         "pose_source": pose_path,
-        "num_keyframes": int(key_poses.shape[0]),
+        "num_keyframes_total": int(total_keyframes),
+        "num_keyframes_used": int(key_poses.shape[0]),
+        "keyframe_index": args.index,
         "interpolation": "slerp+lerp",
         "modalities": list(modalities),
         "depth_normalization_per_frame": [
