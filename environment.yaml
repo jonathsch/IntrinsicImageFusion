@@ -263,7 +263,7 @@ dependencies:
       - stack-data==0.6.3
       - tensorboardx==2.6.2.2
       - tifffile==2023.7.10
-      - tinycudann==2.0
+      - git+https://github.com/NVlabs/tiny-cuda-nn/#subdirectory=bindings/torch
       - tokenizers==0.19.1
       - torch-interpolations==0.1
       - torch-scatter==2.1.2
