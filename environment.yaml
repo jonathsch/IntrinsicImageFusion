@@ -265,7 +265,7 @@ dependencies:
       - tifffile==2023.7.10
       - git+https://github.com/NVlabs/tiny-cuda-nn/#subdirectory=bindings/torch
       - tokenizers==0.19.1
-      - torch-interpolations==0.1
+      - git+https://github.com/sbarratt/torch_interpolations.git
       - torch-scatter==2.1.2
       - torchmetrics==1.5.2
       - tqdm==4.66.1
