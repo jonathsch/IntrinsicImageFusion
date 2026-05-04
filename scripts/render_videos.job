@@ -1,0 +1,37 @@
+#!/bin/bash
+
+#SBATCH --job-name=Render_Videos
+
+#SBATCH --nodes=1
+#SBATCH --cpus-per-gpu=8
+#SBATCH --gpus=1
+#SBATCH --constraint="a100"
+#SBATCH --mem=64GB
+
+#SBATCH --partition=a100_submit
+#SBATCH --qos=normal
+
+#SBATCH --signal=2
+
+#SBATCH --output=./logs/render_videos_%A.log
+#SBATCH --open-mode=append
+
+#SBATCH --time=06:00:00
+
+# Default args — override via:
+#   sbatch --export=ALL,ARGS="--scene bedroom --num-frames 480" scripts/render_videos.job
+ARGS="${ARGS:---scene kitchen --num-frames 240 --spp 64}"
+
+cd "$SLURM_SUBMIT_DIR"
+mkdir -p ./logs
+
+echo "Starting Render_Videos on $SLURMD_NODENAME:$SLURM_JOB_GPUS"
+COMMAND="python scripts/render_videos.py $ARGS"
+echo "$COMMAND"
+echo ========================================================================================
+
+export OPTIX_CACHE_PATH=.optix_cache/$SLURM_JOB_ID
+eval "$COMMAND"
+status=$?
+rm -rf "$OPTIX_CACHE_PATH"
+exit $status
