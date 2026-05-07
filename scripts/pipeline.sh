@@ -1,6 +1,39 @@
 #!/bin/bash
 # Pipeline script to run the full pipeline stages sequentially.
 # Each stage checks if its output directory exists to avoid redundant computation.
+#
+# Submit as a SLURM array job (one task per scene, runs all 4 in parallel):
+#   sbatch scripts/pipeline.sh
+# Or run locally for a single scene:
+#   SCENE_NAME=kitchen bash scripts/pipeline.sh
+
+#SBATCH --job-name=iif_pipeline
+#SBATCH --partition=rtx_3090_submit
+#SBATCH --nodes=1
+#SBATCH --cpus-per-gpu=8
+#SBATCH --gpus=1
+#SBATCH --mem=64GB
+#SBATCH --output=./logs/pipeline_%A_%a.log
+#SBATCH --open-mode=append
+#SBATCH --signal=2
+#SBATCH --time=1-00:00:00
+# One array task per scene — runs all 4 in parallel (SLURM allocates 4 GPUs).
+#SBATCH --array=0-3
+
+# Pick the scene from the array index when running under SLURM.
+SCENES=(kitchen bedroom livingroom bathroom)
+if [[ -n "${SLURM_ARRAY_TASK_ID}" ]]; then
+  SCENE_NAME="${SCENES[$SLURM_ARRAY_TASK_ID]}"
+fi
+
+if [[ -n "${SLURM_SUBMIT_DIR}" ]]; then
+  cd "$SLURM_SUBMIT_DIR"
+  mkdir -p ./logs
+fi
+
+export HYDRA_FULL_ERROR=1
+export OPENCV_IO_ENABLE_OPENEXR=1
+export OPTIX_CACHE_PATH=".optix_cache/${SLURM_ARRAY_JOB_ID:-${SLURM_JOB_ID:-local}}_${SLURM_ARRAY_TASK_ID:-0}"
 
 # Default args
 if [[ -z "${OUT_DIR}" ]]; then
@@ -277,3 +310,5 @@ else
 fi
 
 echo "----------------------------------------------------------------"
+
+rm -rf "$OPTIX_CACHE_PATH"
